@@ -1,58 +1,25 @@
-<p align="center">
-  <img src="docs/images/banner.png" alt="napcat-ai-chatbot banner" width="100%" />
-</p>
+# napcat-ai-chatbot
 
-<p align="center">
-  <strong>napcat-ai-chatbot</strong><br />
-  NapCatQQ 多轮对话插件 · 黑白风 WebUI 仪表盘 · 多 API / 画图 / 伪人 / 对话隔离
-</p>
+NapCatQQ 多轮对话插件 · 黑白风 WebUI 仪表盘 · 多 API / 画图 / 伪人 / 对话隔离
 
-<p align="center">
-  <a href="#功能一览">功能</a> ·
-  <a href="#快速开始">快速开始</a> ·
-  <a href="#webui-预览">预览</a> ·
-  <a href="#star-history">Star History</a> ·
-  <a href="#配置说明">配置</a>
-</p>
+![NapCat](https://img.shields.io/badge/NapCat-%3E%3D4.14.0-000?style=flat-square&labelColor=111&color=eee)
+![Tested](https://img.shields.io/badge/测试版本-4.17.17-000?style=flat-square&labelColor=111&color=eee)
+![License](https://img.shields.io/badge/license-MIT-000?style=flat-square&labelColor=111&color=eee)
+![Version](https://img.shields.io/badge/version-1.3.0-000?style=flat-square&labelColor=111&color=eee)
 
-<p align="center">
-  <img src="https://img.shields.io/badge/NapCat-%3E%3D4.14.0-000?style=flat-square&labelColor=111&color=eee" alt="NapCat" />
-  <img src="https://img.shields.io/badge/测试版本-4.17.17-000?style=flat-square&labelColor=111&color=eee" alt="Tested NapCat" />
-  <img src="https://img.shields.io/badge/license-MIT-000?style=flat-square&labelColor=111&color=eee" alt="License" />
-  <img src="https://img.shields.io/badge/version-1.3.0-000?style=flat-square&labelColor=111&color=eee" alt="Version" />
-</p>
+![banner](docs/images/banner.png)
 
 ---
 
 ## 简介
 
-面向 [NapCatQQ](https://github.com/NapNeko/NapCatQQ) 的聊天机器人插件：支持 @ 触发与指令触发、多轮上下文、人设与冷却、群/用户黑白名单、管理员运维指令，以及一套 **黑白极简** 风格的 WebUI 仪表盘。
-
-- 不包含任何内置 API Key，密钥由用户在仪表盘或 `config.json` 中自行填写
-- 旧版 `xiaviercodex` 提供商已移除，已有配置会自动迁移到「自定义 OpenAI 兼容」
+面向 [NapCatQQ](https://github.com/NapNeko/NapCatQQ) 的聊天机器人插件：支持 @ 触发与指令触发、多轮上下文、人设与冷却、群/用户黑白名单、管理员运维指令，以及黑白极简风格的 WebUI 仪表盘。
 
 ---
 
 ## Star History
 
-在线编辑与对比：[star-history.com](https://www.star-history.com/)
-
-<p align="center">
-  <a href="https://star-history.com/#SUSRDev/napcat-ai-chatbot&Date">
-    <img src="https://api.star-history.com/svg?repos=SUSRDev/napcat-ai-chatbot&type=Date" alt="Star History Chart" width="90%" />
-  </a>
-</p>
-
-<details>
-<summary>多仓库对比（可选）</summary>
-
-将多个仓库用逗号拼接，例如与同类插件对比 Star 走势：
-
-```text
-https://api.star-history.com/svg?repos=SUSRDev/napcat-ai-chatbot,OTHER_USER/other-plugin&type=Date
-```
-
-</details>
+[![Star History Chart](https://api.star-history.com/svg?repos=SUSRDev/napcat-ai-chatbot&type=Date)](https://star-history.com/#SUSRDev/napcat-ai-chatbot&Date)
 
 ---
 
@@ -104,10 +71,7 @@ flowchart LR
 
 ```bash
 git clone https://github.com/SUSRDev/napcat-ai-chatbot.git
-```
-
-# 放入 NapCat 插件目录，例如：
-# <NapCat>/plugins/napcat-plugin-chat-bot/
+# 放入 NapCat 插件目录，例如：<NapCat>/plugins/napcat-plugin-chat-bot/
 ```
 
 重启 NapCat 后，在插件列表中启用 **聊天机器人**。
@@ -118,10 +82,10 @@ git clone https://github.com/SUSRDev/napcat-ai-chatbot.git
 /plugin/napcat-plugin-chat-bot/page/dashboard
 ```
 
-1. **API 与模型**：选择提供商并填写你自己的 API Key  
-2. **图片理解**（可选）：填写视觉 API Key 与 URL  
-3. **群组 / 黑白名单**：按需限制可用范围  
-4. 保存配置后即可在群内 @ 机器人或发送触发词测试  
+1. **API 与模型**：选择提供商并填写 API Key
+2. **图片理解**（可选）：填写视觉 API Key 与 URL
+3. **群组 / 黑白名单**：按需限制可用范围
+4. 保存配置后即可在群内 @ 机器人或发送触发词测试
 
 ---
 
@@ -129,35 +93,23 @@ git clone https://github.com/SUSRDev/napcat-ai-chatbot.git
 
 ### 概览仪表盘
 
-黑白网格背景、Token 趋势与功能状态一览。
-
-<p align="center">
-  <img src="docs/images/screenshot-dashboard.png" alt="仪表盘概览" width="92%" />
-</p>
+![仪表盘概览](docs/images/screenshot-dashboard.png)
 
 ### API 与对话管理
 
-<p align="center">
-  <img src="docs/images/screenshot-api.png" alt="API 配置" width="45%" />
-  &nbsp;
-  <img src="docs/images/screenshot-conversations.png" alt="对话管理" width="45%" />
-</p>
+| API 配置 | 对话管理 |
+|:---:|:---:|
+| ![API 配置](docs/images/screenshot-api.png) | ![对话管理](docs/images/screenshot-conversations.png) |
 
 ### Token 统计与运行日志
 
-图表动画 + JSON 语法高亮日志流。
-
-<p align="center">
-  <img src="docs/images/screenshot-tokens.png" alt="Token 统计" width="45%" />
-  &nbsp;
-  <img src="docs/images/screenshot-logs.png" alt="运行日志" width="45%" />
-</p>
+| Token 统计 | 运行日志 |
+|:---:|:---:|
+| ![Token 统计](docs/images/screenshot-tokens.png) | ![运行日志](docs/images/screenshot-logs.png) |
 
 ### QQ 群内效果
 
-<p align="center">
-  <img src="docs/images/screen-chat.png" alt="群内对话" width="60%" />
-</p>
+![群内对话](docs/images/screen-chat.png)
 
 ---
 
@@ -206,7 +158,7 @@ napcat-plugin-chat-bot/
 
 - [仓库](https://github.com/SUSRDev/napcat-ai-chatbot)
 - [NapCatQQ](https://github.com/NapNeko/NapCatQQ)
-- [Star History](https://www.star-history.com/) — Star 增长曲线图
+- [Star History](https://www.star-history.com/)
 - [NapCat set_msg_emoji_like 文档](https://napcat.apifox.cn/226659104e0)
 
 ---
