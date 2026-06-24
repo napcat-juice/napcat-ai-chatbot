@@ -12,12 +12,12 @@
   <a href="#快速开始">快速开始</a> ·
   <a href="#webui-预览">预览</a> ·
   <a href="#star-history">Star History</a> ·
-  <a href="#配置说明">配置</a> ·
-  <a href="#截图素材指南">素材指南</a>
+  <a href="#配置说明">配置</a>
 </p>
 
 <p align="center">
   <img src="https://img.shields.io/badge/NapCat-%3E%3D4.14.0-000?style=flat-square&labelColor=111&color=eee" alt="NapCat" />
+  <img src="https://img.shields.io/badge/测试版本-4.17.17-000?style=flat-square&labelColor=111&color=eee" alt="Tested NapCat" />
   <img src="https://img.shields.io/badge/license-MIT-000?style=flat-square&labelColor=111&color=eee" alt="License" />
   <img src="https://img.shields.io/badge/version-1.3.0-000?style=flat-square&labelColor=111&color=eee" alt="Version" />
 </p>
@@ -35,12 +35,11 @@
 
 ## Star History
 
-> 将下方链接中的 `YOUR_USERNAME` 替换为你的 GitHub 用户名，推送仓库后即可显示 Star 增长曲线。  
-> 在线编辑与对比：[star-history.com](https://www.star-history.com/)
+在线编辑与对比：[star-history.com](https://www.star-history.com/)
 
 <p align="center">
-  <a href="https://star-history.com/#YOUR_USERNAME/napcat-ai-chatbot&Date">
-    <img src="https://api.star-history.com/svg?repos=YOUR_USERNAME/napcat-ai-chatbot&type=Date" alt="Star History Chart" width="90%" />
+  <a href="https://star-history.com/#SUSRDev/napcat-ai-chatbot&Date">
+    <img src="https://api.star-history.com/svg?repos=SUSRDev/napcat-ai-chatbot&type=Date" alt="Star History Chart" width="90%" />
   </a>
 </p>
 
@@ -50,7 +49,7 @@
 将多个仓库用逗号拼接，例如与同类插件对比 Star 走势：
 
 ```text
-https://api.star-history.com/svg?repos=YOUR_USERNAME/napcat-plugin-chat-bot,OTHER_USER/other-plugin&type=Date
+https://api.star-history.com/svg?repos=SUSRDev/napcat-ai-chatbot,OTHER_USER/other-plugin&type=Date
 ```
 
 </details>
@@ -98,14 +97,14 @@ flowchart LR
 
 ### 环境要求
 
-- NapCat **>= 4.14.0**
+- NapCat **>= 4.14.0**（已在 **4.17.17** 测试通过）
 - Node.js 随 NapCat 运行环境即可（插件为 ESM）
 
 ### 安装
 
 ```bash
-# 克隆仓库（请将 YOUR_USERNAME 换成你的 GitHub 用户名）
-git clone https://github.com/YOUR_USERNAME/napcat-plugin-chat-bot.git
+git clone https://github.com/SUSRDev/napcat-ai-chatbot.git
+```
 
 # 放入 NapCat 插件目录，例如：
 # <NapCat>/plugins/napcat-plugin-chat-bot/
@@ -127,8 +126,6 @@ git clone https://github.com/YOUR_USERNAME/napcat-plugin-chat-bot.git
 ---
 
 ## WebUI 预览
-
-> 以下图片路径已预设。请将截图放入 `docs/images/`，详见 [截图素材指南](#截图素材指南) 与 [docs/IMAGES.md](docs/IMAGES.md)。
 
 ### 概览仪表盘
 
@@ -159,34 +156,8 @@ git clone https://github.com/YOUR_USERNAME/napcat-plugin-chat-bot.git
 ### QQ 群内效果
 
 <p align="center">
-  <img src="docs/images/screenshot-chat.png" alt="群内对话" width="60%" />
+  <img src="docs/images/screen-chat.png" alt="群内对话" width="60%" />
 </p>
-
----
-
-## 截图素材指南
-
-请按此表准备图片并保存到 **`docs/images/`**（文件名必须一致）：
-
-| 文件名 | 放什么 | 怎么截 |
-|--------|--------|--------|
-| `banner.png` | 顶部横幅 | 1200x400，纯文字 + 黑底网格风（已内置，可自选替换） |
-| `screenshot-dashboard.png` | 概览页 | 仪表盘 -> 概览，含卡片与图表 |
-| `screenshot-api.png` | API 页 | API 与模型，**Key 打码** |
-| `screenshot-conversations.png` | 对话管理 | 会话列表 + 可选右侧详情 |
-| `screenshot-tokens.png` | Token 统计 | 三张图表 + 统计卡片 |
-| `screenshot-logs.png` | 运行日志 | 带彩色 JSON 高亮的日志列表 |
-| `screenshot-chat.png` | QQ 群聊 | 实际触发对话，**隐私打码** |
-
-**操作步骤**
-
-1. 浏览器打开仪表盘，使用深色主题  
-2. `Win + Shift + S` 框选（或 macOS `Cmd + Shift + 4`）  
-3. 导出 PNG，重命名为上表文件名  
-4. 复制到 `docs/images/`  
-5. 推送 GitHub 后，把 README 里两处 `YOUR_USERNAME` 改成你的用户名  
-
-更详细的尺寸与 Star History 说明见 **[docs/IMAGES.md](docs/IMAGES.md)**。
 
 ---
 
@@ -226,14 +197,14 @@ napcat-plugin-chat-bot/
 │   ├── image-gen.mjs      # 文生图
 │   └── messages.mjs       # 消息模板
 └── docs/
-    ├── IMAGES.md          # 图片与 Star History 详细说明
-    └── images/            # README 截图与 banner（由你添加）
+    └── images/            # README 预览图
 ```
 
 ---
 
 ## 相关链接
 
+- [仓库](https://github.com/SUSRDev/napcat-ai-chatbot)
 - [NapCatQQ](https://github.com/NapNeko/NapCatQQ)
 - [Star History](https://www.star-history.com/) — Star 增长曲线图
 - [NapCat set_msg_emoji_like 文档](https://napcat.apifox.cn/226659104e0)
