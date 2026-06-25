@@ -4739,10 +4739,8 @@ const plugin_init = async (ctxOrCore, _obContext, _actions, _instance) => {
         try {
           const cfg = pluginState.config || {};
           const body = req.body || {};
-          const userId = String(body.userId || '').trim();
           const currentPassword = String(body.currentPassword || '');
           const newPassword = String(body.newPassword || '');
-          if (!isAdminUser(userId, cfg)) return res.json({ success: false, error: '仅管理员可设置危险操作密码' });
           if (newPassword.length < 8) return res.json({ success: false, error: '新密码至少 8 位' });
           const hasOld = String(cfg.agentDangerPasswordHash || '') && String(cfg.agentDangerPasswordSalt || '');
           if (hasOld && !verifyDangerPassword(cfg, currentPassword)) {
@@ -4772,7 +4770,7 @@ const plugin_init = async (ctxOrCore, _obContext, _actions, _instance) => {
               size: Math.max(0, Number(a?.size) || 0),
               mime: String(a?.mime || '').slice(0, 80),
               textSnippet: String(a?.textSnippet || '').slice(0, 3000),
-              dataUrl: String(a?.dataUrl || '').slice(0, 6 * 1024 * 1024)
+              dataUrl: String(a?.dataUrl || '')
             }))
             .filter((a) => a.name && a.size <= 10 * 1024 * 1024)
             .slice(0, 8);
@@ -4801,8 +4799,10 @@ const plugin_init = async (ctxOrCore, _obContext, _actions, _instance) => {
           const history = getHistory(key);
           let systemContent = (cfg.systemPrompt || DEFAULT_CONFIG.systemPrompt).trim() || '你是友好助手。';
           const imageUrls = attachments
-            .filter((a) => a.kind === 'image' && /^data:image\//i.test(a.dataUrl || ''))
-            .map((a) => a.dataUrl)
+            .filter((a) => a.kind === 'image')
+            .map((a) => String(a.dataUrl || '').trim())
+            .filter((u) => /^data:image\/[a-z0-9.+-]+;base64,[a-z0-9+/=\r\n]+$/i.test(u))
+            .filter((u) => !visionPayloadTooLarge(u))
             .slice(0, 1);
           let imageAnalysis = '';
           if (cfg.chatParseImage !== false && imageUrls.length) {
@@ -4817,6 +4817,8 @@ const plugin_init = async (ctxOrCore, _obContext, _actions, _instance) => {
             } else {
               systemContent += '\n\n用户发送了图片，但视觉分析未返回有效结果。请提示用户补充文字描述。';
             }
+          } else if (cfg.chatParseImage !== false && attachments.some((a) => a.kind === 'image')) {
+            systemContent += '\n\n用户发送了图片，但图片体积过大或格式不完整，视觉模型暂未识别。请提示用户上传更小更清晰图片。';
           }
           if (cfg.skillsEnabled) {
             systemContent += buildAgentSystemExtras(cfg, __dirname, text);

@@ -4211,7 +4211,7 @@
       </div>
       <div class="modal-foot">
         <button type="button" class="btn btn-s" onclick="closeDangerPasswordModal()">取消</button>
-        <button type="button" class="btn btn-p" onclick="submitDangerPasswordChange()">保存密码</button>
+        <button type="button" class="btn btn-p" id="danger-password-save-btn" onclick="submitDangerPasswordChange()">确认设置（5s）</button>
       </div>
     </div>
   </div>
@@ -4240,7 +4240,7 @@
         </div>
         <div class="sidebar-brand-text">
           <h1>Chat Bot</h1>
-          <span id="sidebar-version">NapCat 插件 · v2.7.3</span>
+          <span id="sidebar-version">NapCat 插件 · v2.7.4</span>
         </div>
       </div>
       <nav class="sidebar-nav">
@@ -9398,12 +9398,41 @@
     function openDangerPasswordModal() {
       const ids = ['danger-password-current', 'danger-password-new', 'danger-password-confirm'];
       ids.forEach(function (id) { const el = document.getElementById(id); if (el) el.value = ''; });
+      startDangerPasswordCountdown();
       document.getElementById('danger-password-modal')?.classList.add('open');
     }
 
     function closeDangerPasswordModal(ev) {
       if (ev && ev.target !== ev.currentTarget) return;
+      const btn = document.getElementById('danger-password-save-btn');
+      if (btn && btn._countTimer) {
+        clearInterval(btn._countTimer);
+        btn._countTimer = null;
+      }
       document.getElementById('danger-password-modal')?.classList.remove('open');
+    }
+
+    function startDangerPasswordCountdown() {
+      const btn = document.getElementById('danger-password-save-btn');
+      if (!btn) return;
+      if (btn._countTimer) {
+        clearInterval(btn._countTimer);
+        btn._countTimer = null;
+      }
+      let left = 5;
+      btn.disabled = true;
+      btn.textContent = '确认设置（' + left + 's）';
+      btn._countTimer = setInterval(function () {
+        left -= 1;
+        if (left <= 0) {
+          clearInterval(btn._countTimer);
+          btn._countTimer = null;
+          btn.disabled = false;
+          btn.textContent = '确认设置';
+        } else {
+          btn.textContent = '确认设置（' + left + 's）';
+        }
+      }, 1000);
     }
 
     async function submitDangerPasswordChange() {
@@ -9412,14 +9441,8 @@
       const confirmPassword = (document.getElementById('danger-password-confirm')?.value || '').trim();
       if (!newPassword || newPassword.length < 8) return toast('新密码至少 8 位', 'error');
       if (newPassword !== confirmPassword) return toast('两次输入的新密码不一致', 'error');
-      const ok = await showAppConfirm({
-        title: '确认设置危险操作密码',
-        message: '请仔细阅读：该密码用于高危操作二次验证，采用不可逆加密存储。若忘记，开发者无法恢复。\n\n确认后将等待 5 秒才能点击确认。',
-        confirmText: '确认设置',
-        danger: true,
-        delayMs: 5000
-      });
-      if (!ok) return;
+      const saveBtn = document.getElementById('danger-password-save-btn');
+      if (saveBtn && saveBtn.disabled) return toast('请等待倒计时结束后再确认', 'warn');
       try {
         const ctx = getOverviewChatContext();
         const res = await fetch(BASE + '/agent/danger-password/set', {
