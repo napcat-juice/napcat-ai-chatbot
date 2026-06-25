@@ -10,6 +10,12 @@ import { fileURLToPath } from 'url';
 import { generateImage, IMAGE_GEN_PRESETS } from './lib/image-gen.mjs';
 import { createDrawBot, DRAW_BOT_DEFAULTS, parseDrawMetaCommand } from './lib/draw-bot.mjs';
 import { resolveTemplate, MESSAGE_TEMPLATE_DEFAULTS, normalizeMessagesConfig } from './lib/messages.mjs';
+import {
+  checkForUpdate as checkPluginUpdate,
+  applyReleaseUpdate,
+  readLocalVersion,
+  UPDATE_REPO_URL
+} from './lib/self-update.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -261,7 +267,11 @@ const DEFAULT_CONFIG = {
   fakeHumanSyncPersona: true,
   fakeHumanFollowUpRounds: 2,
   fakeHumanFollowUpTimeoutMs: 120000,
-  fakeHumanActionMode: 'reply'
+  fakeHumanActionMode: 'reply',
+  autoUpdateEnabled: true,
+  autoUpdateIntervalHours: 24,
+  autoUpdateLastCheckAt: 0,
+  autoUpdateLastResult: ''
 };
 
 const conversationHistory = new Map();
@@ -311,7 +321,10 @@ let pluginState = {
   actions: null,
   adapterName: '',
   pluginManager: null,
-  runtimeCtx: null
+  runtimeCtx: null,
+  updateInfo: null,
+  updateRunning: false,
+  autoUpdateTimer: null
 };
 let drawBotEngine = null;
 let reactionCaptureSession = null;
@@ -3076,6 +3089,89 @@ function filterConversationsList(list, query = {}) {
   return { data: out.slice(offset, offset + limit), total, offset, limit };
 }
 
+async function runPluginUpdateCheck(ctx, { persist = true, autoApply = false } = {}) {
+  if (pluginState.updateRunning) {
+    return { success: false, error: '更新正在进行中', info: pluginState.updateInfo };
+  }
+  try {
+    const info = await checkPluginUpdate(__dirname, pluginState.logger);
+    pluginState.updateInfo = info;
+    if (persist) {
+      pluginState.config.autoUpdateLastCheckAt = Date.now();
+      pluginState.config.autoUpdateLastResult = info.hasUpdate
+        ? `发现新版本 v${info.latestVersion}`
+        : `已是最新 v${info.currentVersion}`;
+      saveConfig(ctx);
+    }
+    log('info', info.hasUpdate ? '发现插件新版本' : '插件已是最新版本', {
+      current: info.currentVersion,
+      latest: info.latestVersion
+    }, 'system');
+    if (autoApply && info.hasUpdate && pluginState.config.autoUpdateEnabled) {
+      const applied = await runPluginUpdateApply(ctx, info.release);
+      return { success: true, info, applied };
+    }
+    return { success: true, info };
+  } catch (e) {
+    const msg = e?.message || String(e);
+    if (persist) {
+      pluginState.config.autoUpdateLastResult = `检查失败: ${msg}`;
+      saveConfig(ctx);
+    }
+    log('warn', '检查插件更新失败', { error: msg }, 'system');
+    return { success: false, error: msg, info: pluginState.updateInfo };
+  }
+}
+
+async function runPluginUpdateApply(ctx, releaseInfo) {
+  if (pluginState.updateRunning) throw new Error('更新正在进行中');
+  const release = releaseInfo || pluginState.updateInfo?.release;
+  if (!release?.downloadUrl) throw new Error('请先检查更新');
+  pluginState.updateRunning = true;
+  try {
+    log('info', '开始下载并安装插件更新', { version: release.version, asset: release.assetName }, 'system');
+    const result = await applyReleaseUpdate(__dirname, release, pluginState.logger);
+    const pluginId = path.basename(__dirname);
+    if (pluginState.pluginManager?.reloadPlugin) {
+      try {
+        await pluginState.pluginManager.reloadPlugin(pluginId);
+        log('info', '插件已热重载', { pluginId }, 'system');
+      } catch (e) {
+        log('warn', '插件热重载失败，请手动重启 NapCat', { error: e?.message || e }, 'system');
+      }
+    }
+    pluginState.config.autoUpdateLastResult = `已更新至 v${result.version}`;
+    pluginState.updateInfo = {
+      ...(pluginState.updateInfo || {}),
+      currentVersion: result.version,
+      latestVersion: result.version,
+      hasUpdate: false,
+      checkedAt: Date.now()
+    };
+    saveConfig(ctx);
+    return result;
+  } finally {
+    pluginState.updateRunning = false;
+  }
+}
+
+function scheduleAutoUpdate(ctx) {
+  if (pluginState.autoUpdateTimer) {
+    clearInterval(pluginState.autoUpdateTimer);
+    pluginState.autoUpdateTimer = null;
+  }
+  const tick = async () => {
+    const cfg = pluginState.config;
+    if (!cfg.autoUpdateEnabled) return;
+    const hours = Math.max(1, Number(cfg.autoUpdateIntervalHours) || 24);
+    const last = Number(cfg.autoUpdateLastCheckAt) || 0;
+    if (Date.now() - last < hours * 3600000) return;
+    await runPluginUpdateCheck(ctx, { persist: true, autoApply: true });
+  };
+  setTimeout(() => { tick().catch(() => {}); }, 20000);
+  pluginState.autoUpdateTimer = setInterval(() => { tick().catch(() => {}); }, 3600000);
+}
+
 function shouldTrigger(ctx, event, plainText, selfId) {
   const cfg = pluginState.config;
   const groupId = event.group_id ? String(event.group_id) : null;
@@ -3396,6 +3492,10 @@ const plugin_init = async (ctxOrCore, _obContext, _actions, _instance) => {
         if (body.fakeHumanFollowUpRounds !== undefined) cfg.fakeHumanFollowUpRounds = Math.max(0, Math.min(10, parseInt(body.fakeHumanFollowUpRounds, 10) ?? 2));
         if (body.fakeHumanFollowUpTimeoutMs !== undefined) cfg.fakeHumanFollowUpTimeoutMs = Math.max(10000, parseInt(body.fakeHumanFollowUpTimeoutMs, 10) || 120000);
         if (body.fakeHumanActionMode !== undefined) cfg.fakeHumanActionMode = ['reply', 'at', 'poke', 'ai_choose'].includes(String(body.fakeHumanActionMode).toLowerCase()) ? String(body.fakeHumanActionMode).toLowerCase() : 'reply';
+        if (body.autoUpdateEnabled !== undefined) cfg.autoUpdateEnabled = bool('autoUpdateEnabled', true);
+        if (body.autoUpdateIntervalHours !== undefined) cfg.autoUpdateIntervalHours = num('autoUpdateIntervalHours', 24, 1, 168);
+        if (body.autoUpdateLastCheckAt !== undefined) cfg.autoUpdateLastCheckAt = num('autoUpdateLastCheckAt', 0, 0, Number.MAX_SAFE_INTEGER);
+        if (body.autoUpdateLastResult !== undefined) cfg.autoUpdateLastResult = str('autoUpdateLastResult', '');
         if (body.fakeHumanParseImage !== undefined) cfg.fakeHumanParseImage = Boolean(body.fakeHumanParseImage);
         if (body.fakeHumanVisionModel !== undefined) cfg.fakeHumanVisionModel = String(body.fakeHumanVisionModel || '').trim();
         saveConfig(ctx);
@@ -3705,6 +3805,46 @@ const plugin_init = async (ctxOrCore, _obContext, _actions, _instance) => {
         }
       });
 
+      router.getNoAuth('/update/status', (_, res) => {
+        const info = pluginState.updateInfo;
+        res.json({
+          success: true,
+          currentVersion: readLocalVersion(__dirname),
+          latestVersion: info?.latestVersion || null,
+          hasUpdate: !!info?.hasUpdate,
+          checkedAt: info?.checkedAt || pluginState.config.autoUpdateLastCheckAt || 0,
+          releaseUrl: info?.release?.htmlUrl || UPDATE_REPO_URL + '/releases',
+          updating: pluginState.updateRunning,
+          autoUpdateEnabled: !!pluginState.config.autoUpdateEnabled,
+          autoUpdateIntervalHours: pluginState.config.autoUpdateIntervalHours ?? 24,
+          lastResult: pluginState.config.autoUpdateLastResult || ''
+        });
+      });
+
+      router.postNoAuth('/update/check', async (_, res) => {
+        try {
+          const result = await runPluginUpdateCheck(ctx, { persist: true, autoApply: false });
+          res.json(result);
+        } catch (e) {
+          res.json({ success: false, error: e.message });
+        }
+      });
+
+      router.postNoAuth('/update/apply', async (_, res) => {
+        try {
+          if (!pluginState.updateInfo?.hasUpdate && !pluginState.updateInfo?.release) {
+            await runPluginUpdateCheck(ctx, { persist: false, autoApply: false });
+          }
+          if (!pluginState.updateInfo?.hasUpdate) {
+            return res.json({ success: false, error: '当前已是最新版本' });
+          }
+          const result = await runPluginUpdateApply(ctx, pluginState.updateInfo.release);
+          res.json({ success: true, version: result.version, message: '更新完成，若界面未刷新请重启 NapCat' });
+        } catch (e) {
+          res.json({ success: false, error: e.message });
+        }
+      });
+
       router.getNoAuth('/history/get', (req, res) => {
         const key = (req.query?.key || '').trim();
         if (!key) {
@@ -3764,6 +3904,7 @@ const plugin_init = async (ctxOrCore, _obContext, _actions, _instance) => {
       } catch (err) {
         pluginState.logger?.warn?.('[chat-bot] 配置 UI 初始化失败: ' + (err?.message || err));
       }
+      scheduleAutoUpdate(ctx);
     }
   } catch (e) {
     pluginState.logger?.error?.('[chat-bot] 插件初始化失败: ' + (e?.message || e));

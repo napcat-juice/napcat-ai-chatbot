@@ -23,3 +23,5 @@ logs/
 *.tmp
 ~$*
 *.zip
+.update-tmp/
+.update-backup/

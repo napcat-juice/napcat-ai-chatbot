@@ -1951,6 +1951,35 @@
       color: inherit;
       text-decoration: none;
     }
+    .update-panel {
+      margin: 18px 0 24px;
+      padding: 16px 18px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: var(--card);
+    }
+    .update-panel-head {
+      display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; flex-wrap: wrap;
+      margin-bottom: 14px;
+    }
+    .update-panel-head h3 { font-size: 15px; font-weight: 600; margin: 0 0 4px; }
+    .update-panel-head p { font-size: 12px; color: var(--text2); margin: 0; line-height: 1.55; }
+    .update-version-grid {
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; margin-bottom: 14px;
+    }
+    .update-version-item {
+      padding: 10px 12px; border-radius: 10px; border: 1px solid var(--border); background: var(--bg2);
+    }
+    .update-version-item .label { font-size: 11px; color: var(--text3); margin-bottom: 4px; }
+    .update-version-item .value { font-size: 18px; font-weight: 700; font-variant-numeric: tabular-nums; }
+    .update-badge {
+      display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 999px;
+      font-size: 11px; font-weight: 600; border: 1px solid var(--border); color: var(--text2);
+    }
+    .update-badge.has-update { color: var(--text); border-color: var(--text); background: color-mix(in srgb, var(--text) 8%, var(--bg)); }
+    .update-badge.latest { color: var(--text3); }
+    .update-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+    .update-hint-text { font-size: 12px; color: var(--text3); margin-top: 10px; line-height: 1.55; }
     .theme-toggle .theme-icon { margin-right: 4px; font-size: 13px; }
 
     /* 概览页 */
@@ -3137,7 +3166,7 @@
         </div>
         <div class="sidebar-brand-text">
           <h1>Chat Bot</h1>
-          <span>NapCat 插件 · v2.1</span>
+          <span>NapCat 插件 · v2.2</span>
         </div>
       </div>
       <nav class="sidebar-nav">
@@ -3245,6 +3274,10 @@
           <div class="overview-card"><div class="ov-label">活跃会话</div><div class="ov-value" id="ov-conversations">—</div><div class="ov-sub">内存中的对话数</div></div>
           <div class="overview-card"><div class="ov-label">Token 消耗</div><div class="ov-value" id="ov-tokens">—</div><div class="ov-sub" id="ov-tokens-sub">累计统计</div></div>
           <div class="overview-card"><div class="ov-label">功能开关</div><div class="ov-value" id="ov-features" style="font-size:14px">—</div><div class="ov-sub" id="ov-isolation">—</div></div>
+          <div class="overview-card" style="cursor:pointer" onclick="navigatePage('about', document.querySelector('[data-page=about]'))" title="前往关于与更新">
+            <div class="ov-label">插件版本</div><div class="ov-value" id="ov-version" style="font-size:18px">—</div>
+            <div class="ov-sub" id="ov-update-hint">—</div>
+          </div>
         </div>
         <div class="chart-grid">
           <div class="chart-card"><h4>Token 趋势（近期）</h4><div class="chart-wrap"><canvas id="chart-token-trend"></canvas></div></div>
@@ -4602,6 +4635,33 @@
         <div class="about-hero">
           <h3>NapCat Chat Bot</h3>
           <p>黑白极简风的 NapCat 聊天插件，持续维护中。你的反馈和 Star 都是继续更新的动力 (づ｡◕‿‿◕｡)づ</p>
+        </div>
+        <div class="update-panel" id="update-panel">
+          <div class="update-panel-head">
+            <div>
+              <h3>自动更新</h3>
+              <p>从 GitHub Release 检查并安装最新版，本地 <code>config.json</code> 会自动保留。</p>
+            </div>
+            <span class="update-badge latest" id="upd-badge">检查中…</span>
+          </div>
+          <div class="update-version-grid">
+            <div class="update-version-item"><div class="label">当前版本</div><div class="value" id="upd-current">—</div></div>
+            <div class="update-version-item"><div class="label">最新版本</div><div class="value" id="upd-latest">—</div></div>
+          </div>
+          <div class="form-row" style="margin-bottom:12px">
+            <div class="form-label">自动检查更新<div class="hint">启用后按间隔从 GitHub 拉取 Release，有新版本时自动安装</div></div>
+            <div class="tgl" id="tgl-autoUpdateEnabled" onclick="toggle(this,'autoUpdateEnabled')"></div>
+          </div>
+          <div class="form-row" style="margin-bottom:14px">
+            <div class="form-label">检查间隔（小时）<div class="hint">默认 24 小时，范围 1–168</div></div>
+            <input type="number" class="ipt" id="cfg-autoUpdateIntervalHours" min="1" max="168" value="24" style="max-width:100px" />
+          </div>
+          <div class="update-actions">
+            <button type="button" class="btn btn-s" id="btn-check-update" onclick="checkForPluginUpdate()"><span class="material-symbols-outlined" style="font-size:17px">sync</span>检查更新</button>
+            <button type="button" class="btn btn-p" id="btn-apply-update" onclick="applyPluginUpdate()" style="display:none"><span class="material-symbols-outlined" style="font-size:17px">download</span>立即更新</button>
+            <button type="button" class="btn btn-s" onclick="saveAutoUpdateSettings()"><span class="material-symbols-outlined" style="font-size:17px">save</span>保存设置</button>
+          </div>
+          <div class="update-hint-text" id="upd-hint">—</div>
         </div>
         <div class="about-links">
           <div class="about-link-card">
@@ -5996,6 +6056,10 @@
       renderUserLists();
       showProviderRows();
       showSearchProviderRows();
+      const autoUpTgl = document.getElementById('tgl-autoUpdateEnabled');
+      if (autoUpTgl) autoUpTgl.classList.toggle('on', config.autoUpdateEnabled !== false);
+      const autoUpInt = document.getElementById('cfg-autoUpdateIntervalHours');
+      if (autoUpInt) autoUpInt.value = config.autoUpdateIntervalHours ?? 24;
     }
 
     function showSearchProviderRows() {
@@ -8131,6 +8195,94 @@
       filterGroupsWlBlGrid();
     }
 
+    async function refreshUpdateStatus() {
+      const curEl = document.getElementById('upd-current');
+      const latEl = document.getElementById('upd-latest');
+      const hintEl = document.getElementById('upd-hint');
+      const badgeEl = document.getElementById('upd-badge');
+      const applyBtn = document.getElementById('btn-apply-update');
+      const ovVer = document.getElementById('ov-version');
+      const ovHint = document.getElementById('ov-update-hint');
+      try {
+        const res = await fetch(BASE + '/update/status');
+        const data = await res.json();
+        if (!data.success) return;
+        if (curEl) curEl.textContent = 'v' + (data.currentVersion || '—');
+        if (latEl) latEl.textContent = data.latestVersion ? ('v' + data.latestVersion) : '—';
+        if (ovVer) ovVer.textContent = 'v' + (data.currentVersion || '—');
+        const hint = data.lastResult || (data.hasUpdate ? '发现新版本' : '已是最新');
+        if (hintEl) hintEl.textContent = hint;
+        if (ovHint) ovHint.textContent = data.hasUpdate ? ('可更新 v' + data.latestVersion) : hint;
+        if (badgeEl) {
+          badgeEl.textContent = data.updating ? '更新中…' : (data.hasUpdate ? '有新版本' : '已是最新');
+          badgeEl.className = 'update-badge ' + (data.hasUpdate ? 'has-update' : 'latest');
+        }
+        if (applyBtn) applyBtn.style.display = data.hasUpdate && !data.updating ? 'inline-flex' : 'none';
+      } catch (_) {
+        if (hintEl) hintEl.textContent = '无法获取更新状态';
+      }
+    }
+
+    async function checkForPluginUpdate() {
+      const btn = document.getElementById('btn-check-update');
+      if (btn) btn.disabled = true;
+      toast('正在检查 GitHub Release…', 'info');
+      try {
+        const res = await fetch(BASE + '/update/check', { method: 'POST' });
+        const data = await res.json();
+        if (data.success && data.info) {
+          toast(data.info.hasUpdate ? ('发现新版本 v' + data.info.latestVersion) : '已是最新版本', data.info.hasUpdate ? 'success' : 'info');
+        } else {
+          toast(data.error || '检查失败', 'error');
+        }
+        await refreshUpdateStatus();
+      } catch (e) {
+        toast('检查更新失败', 'error');
+      } finally {
+        if (btn) btn.disabled = false;
+      }
+    }
+
+    async function applyPluginUpdate() {
+      const ok = await showAppConfirm('安装更新', '将从 GitHub 下载最新 Release 并覆盖插件文件（保留 config.json）。完成后建议重启 NapCat。');
+      if (!ok) return;
+      const applyBtn = document.getElementById('btn-apply-update');
+      if (applyBtn) applyBtn.disabled = true;
+      toast('正在下载并安装更新…', 'info');
+      try {
+        const res = await fetch(BASE + '/update/apply', { method: 'POST' });
+        const data = await res.json();
+        if (data.success) {
+          toast(data.message || ('已更新至 v' + data.version), 'success');
+          await loadConfig();
+        } else {
+          toast(data.error || '更新失败', 'error');
+        }
+        await refreshUpdateStatus();
+      } catch (e) {
+        toast('更新失败', 'error');
+      } finally {
+        if (applyBtn) applyBtn.disabled = false;
+      }
+    }
+
+    async function saveAutoUpdateSettings() {
+      const body = {
+        autoUpdateEnabled: document.getElementById('tgl-autoUpdateEnabled')?.classList.contains('on'),
+        autoUpdateIntervalHours: Math.max(1, Math.min(168, parseInt(document.getElementById('cfg-autoUpdateIntervalHours')?.value, 10) || 24))
+      };
+      try {
+        const res = await fetch(BASE + '/config', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+        const data = await res.json();
+        if (data.success) {
+          config = data.config || config;
+          toast('更新设置已保存', 'success');
+        } else toast(data.error || '保存失败', 'error');
+      } catch (e) {
+        toast('保存失败', 'error');
+      }
+    }
+
     async function refreshOverview() {
       const statusEl = document.getElementById('ov-status');
       const provEl = document.getElementById('ov-provider');
@@ -8167,6 +8319,7 @@
         if (convEl) convEl.textContent = '—';
         if (tokEl) tokEl.textContent = '—';
       }
+      refreshUpdateStatus();
     }
 
     async function loadConfig() {
