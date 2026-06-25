@@ -2817,6 +2817,81 @@
     #pg-logs .log-pill.l-info { background: rgba(255,255,255,0.08); color: var(--text2); }
     body.light #pg-logs .log-pill.l-info { background: rgba(0,0,0,0.06); color: var(--text2); }
 
+    /* 更新日志页 — 大日志流样式 */
+    #pg-changelog { max-width: none; }
+    .changelog-panel {
+      border: 1px solid var(--border); border-radius: var(--radius);
+      background: var(--card); overflow: hidden;
+      animation: fadeSlideIn 0.5s var(--ease) 0.08s both;
+    }
+    .changelog-panel-head {
+      display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px;
+      padding: 14px 18px; border-bottom: 1px solid var(--border); background: var(--bg2);
+    }
+    .changelog-panel-title {
+      display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; color: var(--text);
+    }
+    .changelog-count-badge {
+      font-size: 11px; color: var(--text3); padding: 4px 10px;
+      border-radius: 999px; border: 1px solid var(--border); background: var(--bg);
+    }
+    .changelog-stream {
+      background: var(--log-bg, #060608);
+      font-family: 'JetBrains Mono', ui-monospace, monospace;
+      font-size: 14px; line-height: 1.75;
+      padding: 14px 0;
+      max-height: calc(100dvh - 220px);
+      min-height: 480px;
+      overflow-y: auto;
+      color: var(--log-msg, #e5e7eb);
+    }
+    .changelog-stream-line {
+      padding: 6px 20px; white-space: pre-wrap; word-break: break-word;
+      border-left: 4px solid transparent;
+      transition: background 0.12s;
+      animation: logRowIn 0.28s var(--ease) both;
+    }
+    .changelog-stream-line:hover { background: var(--log-hover, rgba(255,255,255,0.04)); }
+    .changelog-stream-line.changelog-ver-head {
+      padding: 12px 20px; margin-top: 4px;
+      border-left-color: var(--log-lv-info, #60a5fa);
+      background: color-mix(in srgb, var(--log-lv-info, #60a5fa) 6%, transparent);
+    }
+    .changelog-stream-line.changelog-ver-head:first-child { margin-top: 0; }
+    .changelog-stream-line .log-ts { color: var(--log-ts, #6b7280); margin-right: 10px; }
+    .changelog-stream-line .log-lv { font-weight: 700; margin-right: 10px; }
+    .changelog-stream-line .changelog-version {
+      font-size: 16px; font-weight: 700; color: var(--log-msg, #e5e7eb);
+      letter-spacing: 0.02em;
+    }
+    .changelog-stream-line.level-new { border-left-color: #34d399; }
+    .changelog-stream-line.level-new .log-lv { color: #34d399; }
+    .changelog-stream-line.level-improve { border-left-color: #a78bfa; }
+    .changelog-stream-line.level-improve .log-lv { color: #a78bfa; }
+    .changelog-stream-line.level-fix { border-left-color: #fbbf24; }
+    .changelog-stream-line.level-fix .log-lv { color: #fbbf24; }
+    .changelog-stream-line.level-other { border-left-color: color-mix(in srgb, var(--text3) 50%, transparent); }
+    .changelog-stream-line .log-msg { color: var(--log-msg, #e5e7eb); }
+    .changelog-stream-line .log-msg strong { color: #fff; font-weight: 600; }
+    body.light .changelog-stream-line .log-msg strong { color: var(--text); }
+    .changelog-stream-line .log-msg code {
+      font-size: 0.92em; padding: 1px 5px; border-radius: 4px;
+      background: rgba(255,255,255,0.08); color: #93c5fd;
+    }
+    .changelog-sep {
+      padding: 4px 20px; color: var(--log-ts, #4b5563); font-size: 12px;
+      user-select: none; opacity: 0.65;
+    }
+    .changelog-empty {
+      padding: 48px 20px; text-align: center; color: var(--text3); font-size: 13px;
+    }
+    @media (max-width: 768px) {
+      .changelog-stream { font-size: 13px; min-height: 360px; max-height: calc(100dvh - 260px); }
+      .changelog-stream-line { padding: 5px 14px; }
+      .changelog-stream-line.changelog-ver-head { padding: 10px 14px; }
+      .changelog-stream-line .changelog-version { font-size: 15px; }
+    }
+
     /* API 配置页 */
     .provider-desc-box {
       padding: 12px 18px; font-size: 12px; color: var(--text2); line-height: 1.65;
@@ -3508,7 +3583,7 @@
         </div>
         <div class="sidebar-brand-text">
           <h1>Chat Bot</h1>
-          <span id="sidebar-version">NapCat 插件 · v2.4.5</span>
+          <span id="sidebar-version">NapCat 插件 · v2.4.6</span>
         </div>
       </div>
       <nav class="sidebar-nav">
@@ -3596,6 +3671,10 @@
         <div class="nav-item" data-page="about" data-title="关于我们">
           <span class="material-symbols-outlined nav-icon">info</span>
           关于我们
+        </div>
+        <div class="nav-item" data-page="changelog" data-title="更新日志">
+          <span class="material-symbols-outlined nav-icon">history</span>
+          更新日志
         </div>
       </nav>
       <div class="sidebar-footer">
@@ -5124,6 +5203,25 @@
         </div>
       </div>
 
+      <div id="pg-changelog" class="page">
+        <div class="page-header">
+          <h2 class="page-title">更新日志</h2>
+          <p class="page-desc">插件全部版本更新记录，终端大日志流样式展示。</p>
+        </div>
+        <div class="changelog-panel">
+          <div class="changelog-panel-head">
+            <div class="changelog-panel-title">
+              <span class="material-symbols-outlined" style="font-size:18px;opacity:.7">terminal</span>
+              CHANGELOG.md
+            </div>
+            <span class="changelog-count-badge" id="changelogCountBadge">加载中…</span>
+          </div>
+          <div class="changelog-stream" id="changelogStream">
+            <div class="changelog-empty">正在加载更新日志…</div>
+          </div>
+        </div>
+      </div>
+
       <div id="pg-messages" class="page">
         <div class="page-header">
           <h2 class="page-title">消息模板</h2>
@@ -5922,6 +6020,106 @@
         sel.innerHTML = '<option value="kimi-for-coding">kimi-for-coding</option>';
         sel.value = 'kimi-for-coding';
         toast('Kimi 对话模型列表加载失败', 'error');
+      }
+    }
+
+    function renderChangelogItemText(text) {
+      return escapeHtml(String(text || ''))
+        .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+        .replace(/`([^`]+)`/g, '<code>$1</code>');
+    }
+
+    function changelogSectionClass(title) {
+      const t = String(title || '').trim();
+      if (t === '新增') return 'level-new';
+      if (t === '改进') return 'level-improve';
+      if (t === '修复') return 'level-fix';
+      return 'level-other';
+    }
+
+    function parseChangelogSections(body) {
+      const sections = [];
+      const matches = [...body.matchAll(/^###\s+(.+)$/gm)];
+      for (let i = 0; i < matches.length; i++) {
+        const title = matches[i][1].trim();
+        const start = matches[i].index + matches[i][0].length;
+        const end = i + 1 < matches.length ? matches[i + 1].index : body.length;
+        const chunk = body.slice(start, end).trim();
+        const items = chunk.split(/\n/).map((l) => l.trim()).filter((l) => l.startsWith('-')).map((l) => l.replace(/^\s*-\s*/, ''));
+        if (items.length) sections.push({ title, items });
+      }
+      return sections;
+    }
+
+    function parseChangelogMarkdown(md) {
+      const entries = [];
+      const matches = [...md.matchAll(/^##\s+\[([^\]]+)\]\s*[—–-]\s*(.+)$/gm)];
+      for (let i = 0; i < matches.length; i++) {
+        const version = matches[i][1].trim();
+        const date = matches[i][2].trim();
+        const start = matches[i].index + matches[i][0].length;
+        const end = i + 1 < matches.length ? matches[i + 1].index : md.length;
+        const body = md.slice(start, end).replace(/^---\s*$/gm, '').trim();
+        entries.push({ version, date, sections: parseChangelogSections(body) });
+      }
+      return entries;
+    }
+
+    function renderChangelogHtml(entries) {
+      if (!entries.length) {
+        return '<div class="changelog-empty">暂无更新日志</div>';
+      }
+      let html = '';
+      let delay = 0;
+      entries.forEach((entry, idx) => {
+        const anim = ' style="animation-delay:' + Math.min(delay, 0.8) + 's"';
+        delay += 0.04;
+        html += '<div class="changelog-stream-line changelog-ver-head level-info"' + anim + '>' +
+          '<span class="log-ts">[' + escapeHtml(entry.date) + ']</span>' +
+          '<span class="log-lv log-lv-info">[RELEASE]</span>' +
+          '<span class="changelog-version">v' + escapeHtml(entry.version) + '</span>' +
+        '</div>';
+        entry.sections.forEach((sec) => {
+          const cls = changelogSectionClass(sec.title);
+          sec.items.forEach((item, j) => {
+            const lineAnim = ' style="animation-delay:' + Math.min(delay + j * 0.015, 1.2) + 's"';
+            html += '<div class="changelog-stream-line ' + cls + '"' + lineAnim + '>' +
+              '<span class="log-ts">[' + escapeHtml(entry.date) + ']</span>' +
+              '<span class="log-lv">[' + escapeHtml(sec.title) + ']</span>' +
+              '<span class="log-msg">' + renderChangelogItemText(item) + '</span>' +
+            '</div>';
+          });
+          delay += sec.items.length * 0.015;
+        });
+        if (idx < entries.length - 1) {
+          html += '<div class="changelog-sep">────────────────────────────────────────</div>';
+        }
+      });
+      return html;
+    }
+
+    async function loadChangelogPage() {
+      const stream = document.getElementById('changelogStream');
+      const badge = document.getElementById('changelogCountBadge');
+      if (!stream) return;
+      stream.innerHTML = '<div class="changelog-empty">正在加载更新日志…</div>';
+      try {
+        const res = await fetch(BASE + '/changelog');
+        const data = await res.json();
+        if (!data.success || !data.content) {
+          stream.innerHTML = '<div class="changelog-empty">' + escapeHtml(data.error || '加载失败') + '</div>';
+          if (badge) badge.textContent = '—';
+          return;
+        }
+        const entries = parseChangelogMarkdown(data.content);
+        stream.innerHTML = renderChangelogHtml(entries);
+        if (badge) {
+          const ver = data.version ? ('当前 v' + data.version + ' · ') : '';
+          badge.textContent = ver + entries.length + ' 个版本';
+        }
+      } catch (e) {
+        stream.innerHTML = '<div class="changelog-empty">加载失败</div>';
+        if (badge) badge.textContent = '—';
       }
     }
 
@@ -9868,6 +10066,8 @@
       }
       if (page === 'reactions') updateReactionEmojiSummary();
       if (page === 'imagegen') onImageGenProviderChange();
+      if (page === 'about') refreshUpdateStatus();
+      if (page === 'changelog') loadChangelogPage();
     }
 
     async function exportConfigFile() {

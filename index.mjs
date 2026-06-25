@@ -4071,6 +4071,20 @@ const plugin_init = async (ctxOrCore, _obContext, _actions, _instance) => {
         }
       });
 
+      router.getNoAuth('/changelog', (_, res) => {
+        try {
+          const file = path.join(__dirname, 'CHANGELOG.md');
+          if (!fs.existsSync(file)) {
+            res.json({ success: false, error: 'CHANGELOG.md 不存在' });
+            return;
+          }
+          const content = fs.readFileSync(file, 'utf-8');
+          res.json({ success: true, content, version: readLocalVersion(__dirname) });
+        } catch (e) {
+          res.json({ success: false, error: e?.message || String(e) });
+        }
+      });
+
       router.getNoAuth('/history/get', (req, res) => {
         const key = (req.query?.key || '').trim();
         if (!key) {
