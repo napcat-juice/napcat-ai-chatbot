@@ -3583,7 +3583,7 @@
         </div>
         <div class="sidebar-brand-text">
           <h1>Chat Bot</h1>
-          <span id="sidebar-version">NapCat 插件 · v2.4.7</span>
+          <span id="sidebar-version">NapCat 插件 · v2.4.8</span>
         </div>
       </div>
       <nav class="sidebar-nav">
@@ -6098,14 +6098,81 @@
       return html;
     }
 
+    const CHANGELOG_REPO = 'SUSRDev/napcat-ai-chatbot';
+    const CHANGELOG_BRANCH = 'master';
+
+    function getChangelogGithubUrls() {
+      const raw = 'https://raw.githubusercontent.com/' + CHANGELOG_REPO + '/' + CHANGELOG_BRANCH + '/CHANGELOG.md';
+      return [
+        'https://cdn.jsdelivr.net/gh/' + CHANGELOG_REPO + '@' + CHANGELOG_BRANCH + '/CHANGELOG.md',
+        raw,
+        'https://ghproxy.cfd/' + raw,
+        'https://github.chenc.dev/' + raw,
+        'https://github.com/' + CHANGELOG_REPO + '/raw/' + CHANGELOG_BRANCH + '/CHANGELOG.md'
+      ];
+    }
+
+    function changelogSourceLabel(url) {
+      if (url.includes('jsdelivr')) return 'jsDelivr';
+      if (url.includes('ghproxy') || url.includes('chenc.dev')) return '镜像';
+      return 'GitHub';
+    }
+
+    async function fetchChangelogFromGithub() {
+      const urls = getChangelogGithubUrls();
+      let lastErr = '未知错误';
+      for (const url of urls) {
+        try {
+          const res = await fetch(url, { cache: 'no-cache' });
+          if (!res.ok) {
+            lastErr = 'HTTP ' + res.status;
+            continue;
+          }
+          const text = await res.text();
+          if (!text.trim() || !text.trim().startsWith('#')) {
+            lastErr = '内容无效';
+            continue;
+          }
+          return { content: text, source: changelogSourceLabel(url) };
+        } catch (e) {
+          lastErr = e?.message || String(e);
+        }
+      }
+      throw new Error(lastErr);
+    }
+
+    async function fetchChangelogPayload() {
+      try {
+        const res = await fetch(BASE + '/changelog');
+        if (res.ok) {
+          const data = await res.json();
+          if (data.success && data.content) return data;
+        }
+      } catch (_) {}
+      const remote = await fetchChangelogFromGithub();
+      let version = '';
+      try {
+        const side = document.getElementById('sidebar-version');
+        const m = (side?.textContent || '').match(/v([\d.]+)/);
+        if (m) version = m[1];
+      } catch (_) {}
+      if (!version) {
+        try {
+          const st = await fetch(BASE + '/update/status');
+          const d = await st.json();
+          if (d.currentVersion) version = d.currentVersion;
+        } catch (_) {}
+      }
+      return { success: true, content: remote.content, source: remote.source, version };
+    }
+
     async function loadChangelogPage() {
       const stream = document.getElementById('changelogStream');
       const badge = document.getElementById('changelogCountBadge');
       if (!stream) return;
-      stream.innerHTML = '<div class="changelog-empty">正在加载更新日志…</div>';
+      stream.innerHTML = '<div class="changelog-empty">正在从 GitHub 加载更新日志…</div>';
       try {
-        const res = await fetch(BASE + '/changelog');
-        const data = await res.json();
+        const data = await fetchChangelogPayload();
         if (!data.success || !data.content) {
           stream.innerHTML = '<div class="changelog-empty">' + escapeHtml(data.error || '加载失败') + '</div>';
           if (badge) badge.textContent = '—';
@@ -6119,7 +6186,7 @@
           badge.textContent = ver + entries.length + ' 个版本 · ' + src;
         }
       } catch (e) {
-        stream.innerHTML = '<div class="changelog-empty">加载失败</div>';
+        stream.innerHTML = '<div class="changelog-empty">加载失败: ' + escapeHtml(e?.message || String(e)) + '</div>';
         if (badge) badge.textContent = '—';
       }
     }
