@@ -33,6 +33,11 @@ import {
 
 const CHANGELOG_GITHUB_URL = `https://github.com/${UPDATE_REPO}/raw/master/CHANGELOG.md`;
 
+import {
+  smartSearchMulti,
+  detectSearchRegion
+} from './lib/smart-search.mjs';
+
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const DEEPSEEK_API = 'https://api.deepseek.com/v1/chat/completions';
@@ -190,7 +195,8 @@ const DEFAULT_CONFIG = {
   logsRefreshIntervalSec: 2,
   logsScrollMode: 'down',
   webSearchEnabled: false,
-  webSearchProvider: 'duckduckgo',
+  webSearchProvider: 'smart',
+  webSearchRegion: 'auto',
   smartSearchQueryMode: 'ai',
   webSearchTriple: false,
   serperApiKey: '',
@@ -322,11 +328,11 @@ function normalizeModelList(list) {
 }
 
 function normalizeWebSearchProvider(raw) {
-  const p = String(raw || 'duckduckgo').toLowerCase().trim();
+  const p = String(raw || 'smart').toLowerCase().trim();
   if (p === 'surper') return 'serper';
   if (p === 'travily') return 'tavily';
-  const allowed = ['serper', 'duckduckgo', 'uapi', 'tavily', 'bocha', 'baidu', 'aliyun', 'both', 'three', 'tsu', 'all'];
-  return allowed.includes(p) ? p : 'duckduckgo';
+  const allowed = ['serper', 'duckduckgo', 'uapi', 'tavily', 'bocha', 'baidu', 'aliyun', 'both', 'three', 'tsu', 'all', 'smart', 'smart-domestic', 'smart-international'];
+  return allowed.includes(p) ? p : 'smart';
 }
 
 function getFallbackModelCandidates(cfg, provider, baseModel) {
@@ -1592,7 +1598,10 @@ function shouldSkipWebSearchByHeuristic(text) {
 }
 
 function buildSearchFallbackQuery(userText) {
-  return String(userText || '').trim().replace(/@[^\s\u2005]+/g, '').replace(/\s+/g, ' ').slice(0, 120);
+  let t = String(userText || '').trim().replace(/@[^\s\u2005]+/g, '').replace(/\s+/g, ' ');
+  t = t.replace(/[？?吗嘛呢吧啊呀]+$/g, '').trim();
+  t = t.replace(/^(请问|问一下|想知道|帮我查|搜一下|查查|帮我搜|查询)/g, '').trim();
+  return t.slice(0, 120);
 }
 
 function parseAiSearchOutput(raw) {
@@ -1623,11 +1632,14 @@ async function aiGenerateSearchQuery(userMessage, historySummary) {
         max_tokens: 80
       })
     });
-    if (!res.ok) return { skip: false, query: null };
+    if (!res.ok) {
+      log('warn', 'AI 生成搜索词 API 失败', { status: res.status }, 'search');
+      return { skip: false, query: null };
+    }
     const data = await res.json();
     return parseAiSearchOutput(data?.choices?.[0]?.message?.content || '');
   } catch (e) {
-    log('warn', 'AI 生成搜索词失败', e.message);
+    log('warn', 'AI 生成搜索词失败', e.message, 'search');
     return { skip: false, query: null };
   }
 }
@@ -1663,7 +1675,7 @@ async function aiGenerateSearchQueries(userMessage, historySummary) {
     if (queries.length) log('info', 'AI 生成多路搜索词', { count: queries.length, queries }, 'search');
     return { skip: false, queries };
   } catch (e) {
-    log('warn', 'AI 生成多路搜索词失败', e.message);
+    log('warn', 'AI 生成多路搜索词失败', e.message, 'search');
     return { skip: false, queries: [] };
   }
 }
@@ -1682,6 +1694,14 @@ async function webSearchMulti(query, cfg) {
   const runBocha = () => (cfg.bochaApiKey ? bochaWebSearch(q, (cfg.bochaApiKey || '').trim()) : Promise.resolve(''));
   const runBaidu = () => (cfg.baiduSearchApiKey ? baiduAiSearch(q, (cfg.baiduSearchApiKey || '').trim()) : Promise.resolve(''));
   const runAliyun = () => (cfg.aliyunIqsAccessKeyId && cfg.aliyunIqsAccessKeySecret ? aliyunUnifiedSearch(q, (cfg.aliyunIqsAccessKeyId || '').trim(), (cfg.aliyunIqsAccessKeySecret || '').trim()) : Promise.resolve(''));
+  const runners = { duck: runDuck, serper: runSerper, uapi: runUapi, tavily: runTavily, bocha: runBocha, baidu: runBaidu, aliyun: runAliyun };
+
+  if (provider === 'smart' || provider === 'smart-domestic' || provider === 'smart-international') {
+    const regionOverride = provider === 'smart-domestic' ? 'domestic' : provider === 'smart-international' ? 'international' : null;
+    const region = regionOverride || detectSearchRegion(q, cfg);
+    log('info', '智能搜索开始', { region, query: q.slice(0, 80) }, 'search');
+    return smartSearchMulti(q, cfg, runners, regionOverride);
+  }
 
   if (provider === 'all') {
     const [d, s, u, t, b, bd, ay] = await Promise.all([runDuck(), runSerper(), runUapi(), runTavily(), runBocha(), runBaidu(), runAliyun()]);
@@ -3518,6 +3538,10 @@ const plugin_init = async (ctxOrCore, _obContext, _actions, _instance) => {
         if (body.theme !== undefined) cfg.theme = ['dark', 'light', 'system'].includes(body.theme) ? body.theme : 'dark';
         if (body.webSearchEnabled !== undefined) cfg.webSearchEnabled = bool('webSearchEnabled', false);
         if (body.webSearchProvider !== undefined) cfg.webSearchProvider = normalizeWebSearchProvider(body.webSearchProvider);
+        if (body.webSearchRegion !== undefined) {
+          const r = String(body.webSearchRegion).toLowerCase();
+          cfg.webSearchRegion = ['auto', 'domestic', 'international'].includes(r) ? r : 'auto';
+        }
         if (body.smartSearchQueryMode !== undefined) cfg.smartSearchQueryMode = ['fixed', 'ai'].includes(String(body.smartSearchQueryMode).toLowerCase()) ? String(body.smartSearchQueryMode).toLowerCase() : 'ai';
         if (body.serperApiKey !== undefined) cfg.serperApiKey = str('serperApiKey', '');
         if (body.uapiApiKey !== undefined) cfg.uapiApiKey = str('uapiApiKey', '');
@@ -4394,13 +4418,9 @@ const plugin_onmessage = async (ctx, event) => {
           qList = fixed ? [fixed] : (fallback ? [fallback] : []);
         } else if (!qList.length) {
           qList = fallback ? [fallback] : [];
-          if (qList.length) log('info', 'AI 未生成搜索词，使用用户问题', { query: qList[0].slice(0, 60) });
+          if (qList.length) log('info', 'AI 未生成搜索词，使用用户原话', { query: qList[0].slice(0, 60) }, 'search');
         }
-        if (qList.length >= 2) {
-          // keep
-        } else if (qList.length === 1 && fixed && smartMode === 'ai') {
-          qList = [qList[0], fixed].slice(0, 3);
-        } else if (qList.length === 1) {
+        if (qList.length === 1) {
           qList = [qList[0]];
         }
         if (qList.length) {
@@ -4429,7 +4449,7 @@ const plugin_onmessage = async (ctx, event) => {
           log('info', 'AI 生成搜索词', { query });
         } else {
           query = buildSearchFallbackQuery(userText);
-          if (query) log('info', 'AI 未生成搜索词，使用用户问题', { query: query.slice(0, 60) });
+          if (query) log('info', 'AI 未生成搜索词，使用用户原话', { query: query.slice(0, 60) }, 'search');
         }
       }
       if (query) {

@@ -3583,7 +3583,7 @@
         </div>
         <div class="sidebar-brand-text">
           <h1>Chat Bot</h1>
-          <span id="sidebar-version">NapCat 插件 · v2.4.8</span>
+          <span id="sidebar-version">NapCat 插件 · v2.5.0</span>
         </div>
       </div>
       <nav class="sidebar-nav">
@@ -4026,12 +4026,15 @@
 
       <div id="pg-search" class="page">
         <h2 class="page-title">智能搜索（多引擎）</h2>
-        <p style="font-size:12px;color:var(--text3);margin-bottom:12px">支持 DuckDuckGo、Serper、UAPI、Tavily、博查、百度 AI 搜索、阿里云 IQS；选「全渠道」时并行调用所有已配置 Key 的引擎并合并结果。</p>
+        <p style="font-size:12px;color:var(--text3);margin-bottom:12px">支持智能多平台（哔哩哔哩/抖音/百度等国内 · DuckDuckGo/Serper/Tavily 等国外）、单引擎与全渠道并行。</p>
         <div class="section">
           <div class="section-title">搜索渠道</div>
           <div class="form-row">
             <div class="form-label">渠道</div>
             <select class="ipt" id="cfg-webSearchProvider" style="max-width:320px">
+              <option value="smart">智能搜索（自动国内/国外）</option>
+              <option value="smart-domestic">智能搜索（国内平台）</option>
+              <option value="smart-international">智能搜索（国外平台）</option>
               <option value="duckduckgo">DuckDuckGo（免 Key）</option>
               <option value="serper">Serper（Google）</option>
               <option value="uapi">UAPI 智能搜索（uapis.cn）</option>
@@ -4043,6 +4046,14 @@
               <option value="both">双渠道（DuckDuckGo + Serper）</option>
               <option value="three">三渠道（DuckDuckGo + Serper + UAPI）</option>
               <option value="all">全渠道（所有已配置 Key 的引擎并行）</option>
+            </select>
+          </div>
+          <div class="form-row" id="row-webSearchRegion">
+            <div class="form-label">智能搜索区域<div class="hint">仅「智能搜索」渠道生效；自动根据关键词中英文判断</div></div>
+            <select class="ipt" id="cfg-webSearchRegion" style="max-width:200px">
+              <option value="auto">自动（中文→国内，英文→国外）</option>
+              <option value="domestic">国内（哔哩哔哩、抖音、百度、博查等）</option>
+              <option value="international">国外（DuckDuckGo、Serper、Tavily 等）</option>
             </select>
           </div>
           <div class="form-row" id="row-serperKey">
@@ -4106,8 +4117,8 @@
             </select>
           </div>
           <div class="form-row">
-            <div class="form-label">固定搜索关键词<div class="hint">在「固定关键词」模式或 AI 未生成时使用</div></div>
-            <input type="text" class="ipt" id="cfg-webSearchQuery" placeholder="留空则由 AI 生成；固定模式时填写默认搜索词" />
+            <div class="form-label">固定搜索关键词<div class="hint">仅在「固定关键词」模式下使用；AI 模式失败时用用户原话搜索，不会用此处配置</div></div>
+            <input type="text" class="ipt" id="cfg-webSearchQuery" placeholder="仅固定模式填写，如：某游戏角色 设定" />
           </div>
         </div>
         <div class="section">
@@ -5360,11 +5371,11 @@
     let groupsWlBl = {};
 
     function normalizeWebSearchProvider(raw) {
-      const p = String(raw || 'duckduckgo').toLowerCase().trim();
+      const p = String(raw || 'smart').toLowerCase().trim();
       if (p === 'surper') return 'serper';
       if (p === 'travily') return 'tavily';
-      const allowed = ['serper', 'duckduckgo', 'uapi', 'tavily', 'bocha', 'baidu', 'aliyun', 'both', 'three', 'tsu', 'all'];
-      return allowed.includes(p) ? p : 'duckduckgo';
+      const allowed = ['serper', 'duckduckgo', 'uapi', 'tavily', 'bocha', 'baidu', 'aliyun', 'both', 'three', 'tsu', 'all', 'smart', 'smart-domestic', 'smart-international'];
+      return allowed.includes(p) ? p : 'smart';
     }
 
     const SILICONFLOW_MODELS = [
@@ -6627,7 +6638,9 @@
       const logsScrollEl = document.getElementById('logsPageScrollMode');
       if (logsScrollEl) logsScrollEl.value = config.logsScrollMode === 'up' ? 'up' : 'down';
       document.getElementById('cfg-webSearchQuery').value = config.webSearchQuery || '';
-      document.getElementById('cfg-webSearchProvider').value = normalizeWebSearchProvider(config.webSearchProvider || 'duckduckgo');
+      document.getElementById('cfg-webSearchProvider').value = normalizeWebSearchProvider(config.webSearchProvider || 'smart');
+      const regionEl = document.getElementById('cfg-webSearchRegion');
+      if (regionEl) regionEl.value = ['auto', 'domestic', 'international'].includes(config.webSearchRegion) ? config.webSearchRegion : 'auto';
       document.getElementById('cfg-smartSearchQueryMode').value = (config.smartSearchQueryMode || 'ai').toLowerCase();
       document.getElementById('cfg-serperApiKey').value = config.serperApiKey || '';
       document.getElementById('cfg-uapiApiKey').value = config.uapiApiKey || '';
@@ -6785,20 +6798,24 @@
     }
 
     function showSearchProviderRows() {
-      const p = normalizeWebSearchProvider((document.getElementById('cfg-webSearchProvider') && document.getElementById('cfg-webSearchProvider').value) || (config.webSearchProvider || 'duckduckgo'));
+      const p = normalizeWebSearchProvider((document.getElementById('cfg-webSearchProvider') && document.getElementById('cfg-webSearchProvider').value) || (config.webSearchProvider || 'smart'));
+      const isSmart = p === 'smart' || p === 'smart-domestic' || p === 'smart-international';
+      const isDomestic = p === 'smart-domestic' || (p === 'smart' && (document.getElementById('cfg-webSearchRegion')?.value || config.webSearchRegion || 'auto') !== 'international');
+      const isIntl = p === 'smart-international' || (p === 'smart' && (document.getElementById('cfg-webSearchRegion')?.value || config.webSearchRegion || 'auto') === 'international');
       const single = (key) => p === key;
       const multi = (key) => p === key || p === 'all';
       const show = (el, cond) => { if (el) el.style.display = cond ? 'flex' : 'none'; };
-      show(document.getElementById('row-serperKey'), single('serper') || multi('both') || multi('three') || single('tsu'));
-      show(document.getElementById('row-uapiKey'), single('uapi') || multi('three') || single('tsu'));
-      show(document.getElementById('row-uapiTimeout'), single('uapi') || multi('three') || single('tsu'));
-      show(document.getElementById('row-uapiSort'), single('uapi') || multi('three') || single('tsu'));
-      show(document.getElementById('row-uapiTimeRange'), single('uapi') || multi('three') || single('tsu'));
-      show(document.getElementById('row-tavilyKey'), single('tavily') || single('tsu') || p === 'all');
-      show(document.getElementById('row-bochaKey'), single('bocha') || p === 'all');
-      show(document.getElementById('row-baiduKey'), single('baidu') || p === 'all');
-      show(document.getElementById('row-aliyunId'), single('aliyun') || p === 'all');
-      show(document.getElementById('row-aliyunSecret'), single('aliyun') || p === 'all');
+      show(document.getElementById('row-webSearchRegion'), isSmart);
+      show(document.getElementById('row-serperKey'), single('serper') || multi('both') || multi('three') || single('tsu') || isIntl || isSmart);
+      show(document.getElementById('row-uapiKey'), single('uapi') || multi('three') || single('tsu') || isSmart);
+      show(document.getElementById('row-uapiTimeout'), single('uapi') || multi('three') || single('tsu') || isSmart);
+      show(document.getElementById('row-uapiSort'), single('uapi') || multi('three') || single('tsu') || isSmart);
+      show(document.getElementById('row-uapiTimeRange'), single('uapi') || multi('three') || single('tsu') || isSmart);
+      show(document.getElementById('row-tavilyKey'), single('tavily') || single('tsu') || p === 'all' || isIntl || isSmart);
+      show(document.getElementById('row-bochaKey'), single('bocha') || p === 'all' || isDomestic || isSmart);
+      show(document.getElementById('row-baiduKey'), single('baidu') || p === 'all' || isDomestic || isSmart);
+      show(document.getElementById('row-aliyunId'), single('aliyun') || p === 'all' || isDomestic || isSmart);
+      show(document.getElementById('row-aliyunSecret'), single('aliyun') || p === 'all' || isDomestic || isSmart);
     }
 
     function toggleSidebar() { document.getElementById('layout').classList.toggle('sidebar-open'); }
@@ -7668,7 +7685,9 @@
 
     async function saveSearchConfig() {
       const cfg = { ...config };
-      cfg.webSearchProvider = normalizeWebSearchProvider((document.getElementById('cfg-webSearchProvider').value || 'duckduckgo'));
+      cfg.webSearchProvider = normalizeWebSearchProvider((document.getElementById('cfg-webSearchProvider').value || 'smart'));
+      const regionEl = document.getElementById('cfg-webSearchRegion');
+      cfg.webSearchRegion = regionEl && ['auto', 'domestic', 'international'].includes(regionEl.value) ? regionEl.value : 'auto';
       cfg.serperApiKey = document.getElementById('cfg-serperApiKey').value.trim();
       cfg.uapiApiKey = document.getElementById('cfg-uapiApiKey').value.trim();
       cfg.tavilyApiKey = document.getElementById('cfg-tavilyApiKey').value.trim();
@@ -9661,8 +9680,10 @@
       cfg.enableThinking = document.getElementById('cfg-enableThinking').checked === true;
       cfg.thinkingBudget = Math.max(0, Math.min(65536, parseInt(document.getElementById('cfg-thinkingBudget').value, 10) || 4096));
       cfg.webSearchEnabled = document.getElementById('tgl-webSearchEnabled').classList.contains('on');
-      const prov = (document.getElementById('cfg-webSearchProvider') && document.getElementById('cfg-webSearchProvider').value) || 'duckduckgo';
+      const prov = (document.getElementById('cfg-webSearchProvider') && document.getElementById('cfg-webSearchProvider').value) || 'smart';
       cfg.webSearchProvider = normalizeWebSearchProvider(prov);
+      const regionElMain = document.getElementById('cfg-webSearchRegion');
+      cfg.webSearchRegion = regionElMain && ['auto', 'domestic', 'international'].includes(regionElMain.value) ? regionElMain.value : 'auto';
       cfg.serperApiKey = (document.getElementById('cfg-serperApiKey') && document.getElementById('cfg-serperApiKey').value.trim()) || '';
       cfg.tavilyApiKey = (document.getElementById('cfg-tavilyApiKey') && document.getElementById('cfg-tavilyApiKey').value.trim()) || '';
       cfg.bochaApiKey = (document.getElementById('cfg-bochaApiKey') && document.getElementById('cfg-bochaApiKey').value.trim()) || '';
@@ -10201,6 +10222,8 @@
     });
 
     document.getElementById('cfg-webSearchProvider').addEventListener('change', showSearchProviderRows);
+    const regionSel = document.getElementById('cfg-webSearchRegion');
+    if (regionSel) regionSel.addEventListener('change', showSearchProviderRows);
 
     document.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') {
