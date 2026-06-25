@@ -2313,6 +2313,83 @@
     .overview-card .ov-label { font-size: 11px; color: var(--text3); font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 8px; }
     .overview-card .ov-value { font-size: 22px; font-weight: 700; letter-spacing: -0.02em; }
     .overview-card .ov-sub { font-size: 12px; color: var(--text2); margin-top: 6px; }
+    .overview-chat {
+      margin-top: 18px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: var(--card);
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      min-height: 520px;
+    }
+    .overview-chat-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+      padding: 12px 14px;
+      border-bottom: 1px solid var(--border);
+      background: var(--bg2);
+      flex-wrap: wrap;
+    }
+    .overview-chat-head .title {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text);
+    }
+    .overview-chat-context {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+    .overview-chat-context .ipt {
+      min-width: 120px;
+      max-width: 180px;
+      font-size: 12px;
+      padding: 7px 9px;
+      min-height: 34px;
+    }
+    .overview-chat-body {
+      flex: 1;
+      overflow-y: auto;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      min-height: 320px;
+    }
+    .overview-chat-actions {
+      border-top: 1px solid var(--border);
+      padding: 10px 12px;
+      display: flex;
+      gap: 8px;
+      align-items: flex-end;
+      background: var(--bg2);
+    }
+    .overview-chat-actions textarea {
+      flex: 1;
+      min-height: 56px;
+      max-height: 180px;
+      resize: vertical;
+    }
+    .chat-bubble.typing {
+      position: relative;
+      overflow: hidden;
+    }
+    .chat-bubble.typing::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(90deg, transparent, rgba(255,255,255,0.08), transparent);
+      transform: translateX(-100%);
+      animation: shimmer 1.2s infinite;
+      pointer-events: none;
+    }
+    @keyframes shimmer {
+      to { transform: translateX(100%); }
+    }
     .quick-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 24px; }
     .quick-action-btn {
       display: inline-flex; align-items: center; justify-content: center;
@@ -3288,11 +3365,53 @@
     #pg-agent .mcp-card-grid .full {
       grid-column: 1 / -1;
     }
+    #pg-agent .mcp-presets {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin: 10px 0 0;
+    }
     #pg-agent .mcp-field-label {
       font-size: 11px;
       color: var(--text3);
       margin-bottom: 4px;
     }
+    #pg-agent .mcp-card-note {
+      margin-top: 10px;
+      padding: 8px 10px;
+      border-radius: 8px;
+      background: var(--bg2);
+      color: var(--text3);
+      font-size: 12px;
+      line-height: 1.6;
+    }
+    #pg-agent .mcp-status-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+      gap: 10px;
+      margin-top: 12px;
+    }
+    #pg-agent .mcp-status-card {
+      padding: 12px;
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+    }
+    #pg-agent .mcp-status-label {
+      font-size: 11px;
+      color: var(--text3);
+      margin-bottom: 4px;
+    }
+    #pg-agent .mcp-status-value {
+      font-size: 13px;
+      color: var(--text);
+      font-weight: 600;
+      line-height: 1.45;
+      word-break: break-word;
+    }
+    #pg-agent .mcp-status-value.ok { color: #4ade80; }
+    #pg-agent .mcp-status-value.warn { color: #fbbf24; }
+    #pg-agent .mcp-status-value.err { color: #f87171; }
     #pg-agent .mcp-empty {
       padding: 18px 14px;
       border: 1px dashed var(--border);
@@ -3933,7 +4052,7 @@
         </div>
         <div class="sidebar-brand-text">
           <h1>Chat Bot</h1>
-          <span id="sidebar-version">NapCat 插件 · v2.6.13</span>
+          <span id="sidebar-version">NapCat 插件 · v2.7.0</span>
         </div>
       </div>
       <nav class="sidebar-nav">
@@ -4073,6 +4192,26 @@
           <button type="button" class="quick-action-btn" title="对话管理" onclick="navigatePage('conversations', document.querySelector('[data-page=conversations]'))"><span class="material-symbols-outlined">forum</span></button>
           <button type="button" class="quick-action-btn" title="隔离设置" onclick="navigatePage('cooldown', document.querySelector('[data-page=cooldown]'))"><span class="material-symbols-outlined">lock</span></button>
           <button type="button" class="quick-action-btn" title="运行日志" onclick="navigatePage('logs', document.querySelector('[data-page=logs]'))"><span class="material-symbols-outlined">assignment</span></button>
+        </div>
+        <div class="overview-chat">
+          <div class="overview-chat-head">
+            <div class="title">在线对话调试（支持 MCP / 工具调用可视化）</div>
+            <div class="overview-chat-context">
+              <input type="text" class="ipt" id="ov-chat-user-id" placeholder="用户ID（默认90000001）" />
+              <input type="text" class="ipt" id="ov-chat-group-id" placeholder="群ID（可选）" />
+              <button type="button" class="btn btn-s" onclick="openOverviewChatInConversations()">在对话管理打开</button>
+            </div>
+          </div>
+          <div id="ov-chat-body" class="overview-chat-body">
+            <div class="conv-empty-state">
+              <span class="material-symbols-outlined" style="font-size:48px;opacity:.35">chat</span>
+              <span>在下方输入内容即可开始调试。开启 Agent 与 MCP 后，回复中会显示工具调用详情。</span>
+            </div>
+          </div>
+          <div class="overview-chat-actions">
+            <textarea class="ipt" id="ov-chat-input" placeholder="输入问题，例如：帮我查一下今天上海天气，并给出穿衣建议（会按需调用MCP）" onkeydown="onOverviewChatKeydown(event)"></textarea>
+            <button type="button" class="btn btn-p" id="ov-chat-send" onclick="sendOverviewChat()">发送</button>
+          </div>
         </div>
       </div>
 
@@ -4892,6 +5031,15 @@
               <div class="agent-toolbar" style="padding-top:0">
                 <button type="button" class="btn btn-s" onclick="addMcpServerCard()"><span class="material-symbols-outlined">add</span>新增 MCP 服务</button>
               </div>
+              <div class="mcp-presets">
+                <button type="button" class="btn btn-s" onclick="addMcpPreset('filesystem')">本地文件</button>
+                <button type="button" class="btn btn-s" onclick="addMcpPreset('fetch')">网页 / 天气 / 时间</button>
+                <button type="button" class="btn btn-s" onclick="addMcpPreset('time')">本地时间</button>
+                <button type="button" class="btn btn-s" onclick="addMcpPreset('date')">日期</button>
+                <button type="button" class="btn btn-s" onclick="addMcpPreset('weather')">天气</button>
+                <button type="button" class="btn btn-s" onclick="addMcpPreset('sqlite')">SQLite 数据库</button>
+                <button type="button" class="btn btn-s" onclick="addMcpPreset('github')">GitHub</button>
+              </div>
               <div id="mcp-servers-list" class="mcp-list"></div>
             </div>
           </div>
@@ -4900,7 +5048,7 @@
             <button type="button" class="btn btn-s" onclick="reloadAgentHub()"><span class="material-symbols-outlined">hub</span>重载 MCP</button>
             <button type="button" class="btn btn-s" onclick="loadAgentStatus()"><span class="material-symbols-outlined">monitoring</span>查看状态</button>
           </div>
-          <div id="agent-mcp-status" class="agent-panel mono"></div>
+          <div id="agent-mcp-status" class="agent-panel"></div>
           </div>
         </div>
 
@@ -6742,27 +6890,69 @@
     function renderAgentMcpStatus(data) {
       const el = document.getElementById('agent-mcp-status');
       if (!el) return;
-      const lines = [];
-      lines.push('Agent 模式: ' + (data.agentToolsEnabled ? '开' : '关'));
-      lines.push('MCP: ' + (data.mcpEnabled ? '开' : '关') + ' · 工具数 ' + (data.mcpToolCount || 0));
-      if (data.mcp && data.mcp.length) {
-        data.mcp.forEach(function (m) {
-          lines.push('  - ' + m.name + ' [' + m.id + '] ' + (m.connected ? '已连接' : '未连接') + ' tools=' + m.tools + (m.lastError ? ' err=' + m.lastError : ''));
-        });
+      const cards = [];
+      cards.push({
+        label: 'Agent 模式',
+        value: data.agentToolsEnabled ? '已开启' : '未开启',
+        cls: data.agentToolsEnabled ? 'ok' : 'warn'
+      });
+      cards.push({
+        label: 'MCP 总开关',
+        value: data.mcpEnabled ? '已开启' : '未开启',
+        cls: data.mcpEnabled ? 'ok' : 'warn'
+      });
+      cards.push({
+        label: '可用工具数',
+        value: String(data.mcpToolCount || 0),
+        cls: (data.mcpToolCount || 0) > 0 ? 'ok' : 'warn'
+      });
+      const servers = Array.isArray(data.mcp) ? data.mcp : [];
+      if (!servers.length) {
+        el.innerHTML =
+          '<div class="mcp-status-grid">' +
+          cards.map(function (item) {
+            return '<div class="mcp-status-card"><div class="mcp-status-label">' + escapeHtml(item.label) + '</div><div class="mcp-status-value ' + item.cls + '">' + escapeHtml(item.value) + '</div></div>';
+          }).join('') +
+          '</div>' +
+          '<div class="mcp-card-note">当前还没有已连接的 MCP 服务。请先新增服务、保存配置，再点“重载 MCP”。</div>';
+        return;
       }
-      el.textContent = lines.join('\n');
+      const serverCards = servers.map(function (m) {
+        const state = m.connected ? '已连接' : '未连接';
+        const cls = m.connected ? 'ok' : (m.lastError ? 'err' : 'warn');
+        return '<div class="mcp-status-card">' +
+          '<div class="mcp-status-label">' + escapeHtml(m.name || m.id || '未命名服务') + '</div>' +
+          '<div class="mcp-status-value ' + cls + '">' + escapeHtml(state) + '</div>' +
+          '<div class="mcp-status-label" style="margin-top:8px">工具数量</div>' +
+          '<div class="mcp-status-value">' + escapeHtml(String(m.tools || 0)) + '</div>' +
+          (m.lastError ? '<div class="mcp-status-label" style="margin-top:8px">错误信息</div><div class="mcp-status-value err" style="font-weight:500">' + escapeHtml(m.lastError) + '</div>' : '') +
+        '</div>';
+      }).join('');
+      el.innerHTML =
+        '<div class="mcp-status-grid">' +
+        cards.map(function (item) {
+          return '<div class="mcp-status-card"><div class="mcp-status-label">' + escapeHtml(item.label) + '</div><div class="mcp-status-value ' + item.cls + '">' + escapeHtml(item.value) + '</div></div>';
+        }).join('') +
+        serverCards +
+        '</div>';
     }
 
     async function loadAgentStatus() {
       try {
+        const el = document.getElementById('agent-mcp-status');
+        if (el) el.innerHTML = '<div class="mcp-card-note">正在检查 MCP 连接状态，请稍候…</div>';
         const res = await fetch(BASE + '/agent/status');
         const data = await res.json();
         if (!data.success) {
+          if (el) el.innerHTML = '<div class="mcp-card-note">状态加载失败：' + escapeHtml(data.error || '未知错误') + '</div>';
           toast(data.error || '加载 Agent 状态失败', 'error');
           return;
         }
         renderAgentMcpStatus(data);
+        toast('MCP 状态已更新', 'success');
       } catch (e) {
+        const el = document.getElementById('agent-mcp-status');
+        if (el) el.innerHTML = '<div class="mcp-card-note">状态加载失败：网络或接口异常。</div>';
         toast('加载 Agent 状态失败', 'error');
       }
     }
@@ -7784,14 +7974,110 @@
 
     function toggleSidebar() { document.getElementById('layout').classList.toggle('sidebar-open'); }
 
+    function getMcpPresetMap() {
+      return {
+        filesystem: {
+          type: 'filesystem',
+          id: 'filesystem',
+          name: '本地文件',
+          command: 'npx',
+          args: ['-y', '@modelcontextprotocol/server-filesystem', 'D:/allowed'],
+          enabled: true
+        },
+        fetch: {
+          type: 'fetch',
+          id: 'fetch',
+          name: '网页 / 天气 / 时间',
+          command: 'npx',
+          args: ['-y', '@modelcontextprotocol/server-fetch'],
+          enabled: true
+        },
+        time: {
+          type: 'fetch',
+          id: 'time-helper',
+          name: '本地时间',
+          command: 'npx',
+          args: ['-y', '@modelcontextprotocol/server-fetch'],
+          enabled: true
+        },
+        date: {
+          type: 'fetch',
+          id: 'date-helper',
+          name: '日期查询',
+          command: 'npx',
+          args: ['-y', '@modelcontextprotocol/server-fetch'],
+          enabled: true
+        },
+        weather: {
+          type: 'fetch',
+          id: 'weather-helper',
+          name: '天气查询',
+          command: 'npx',
+          args: ['-y', '@modelcontextprotocol/server-fetch'],
+          enabled: true
+        },
+        sqlite: {
+          type: 'sqlite',
+          id: 'sqlite',
+          name: 'SQLite 数据库',
+          command: 'npx',
+          args: ['-y', '@modelcontextprotocol/server-sqlite', 'D:/data/app.db'],
+          enabled: true
+        },
+        github: {
+          type: 'github',
+          id: 'github',
+          name: 'GitHub',
+          command: 'npx',
+          args: ['-y', '@modelcontextprotocol/server-github'],
+          enabled: true
+        }
+      };
+    }
+
+    function inferMcpType(item) {
+      const args = Array.isArray(item.args) ? item.args.join(' ') : '';
+      if (/@modelcontextprotocol\/server-filesystem/i.test(args)) return 'filesystem';
+      if (/@modelcontextprotocol\/server-fetch/i.test(args)) return 'fetch';
+      if (/@modelcontextprotocol\/server-sqlite/i.test(args)) return 'sqlite';
+      if (/@modelcontextprotocol\/server-github/i.test(args)) return 'github';
+      return item.type || 'custom';
+    }
+
+    function buildArgsForMcpType(type, item) {
+      const t = (type || 'custom').toLowerCase();
+      if (t === 'filesystem') {
+        const dir = item.allowedDir || 'D:/allowed';
+        return ['-y', '@modelcontextprotocol/server-filesystem', dir];
+      }
+      if (t === 'fetch') {
+        return ['-y', '@modelcontextprotocol/server-fetch'];
+      }
+      if (t === 'sqlite') {
+        const dbPath = item.dbPath || 'D:/data/app.db';
+        return ['-y', '@modelcontextprotocol/server-sqlite', dbPath];
+      }
+      if (t === 'github') {
+        return ['-y', '@modelcontextprotocol/server-github'];
+      }
+      return Array.isArray(item.args) ? item.args : [];
+    }
+
     function createMcpServerCard(server, idx) {
       const item = Object.assign({
+        type: 'custom',
         id: '',
         name: '',
         command: '',
         args: [],
         enabled: true
       }, server || {});
+      item.type = inferMcpType(item);
+      item.allowedDir = item.type === 'filesystem' ? (item.args && item.args[2] ? item.args[2] : 'D:/allowed') : (item.allowedDir || 'D:/allowed');
+      item.dbPath = item.type === 'sqlite' ? (item.args && item.args[2] ? item.args[2] : 'D:/data/app.db') : (item.dbPath || 'D:/data/app.db');
+      const fieldClass = function (key, extra) {
+        return ' class="' + ((extra ? extra + ' ' : '') + 'mcp-field-group mcp-field-' + key) + '"' + (item.type === key ? '' : ' style="display:none"');
+      };
       const wrap = document.createElement('div');
       wrap.className = 'mcp-card';
       wrap.innerHTML = '' +
@@ -7805,13 +8091,38 @@
           '</div>' +
         '</div>' +
         '<div class="mcp-card-grid">' +
+          '<div><div class="mcp-field-label">服务类型</div><select class="ipt mcp-type" onchange="onMcpTypeChange(this)"><option value="filesystem"' + (item.type === 'filesystem' ? ' selected' : '') + '>本地文件</option><option value="fetch"' + (item.type === 'fetch' ? ' selected' : '') + '>网页 / 天气 / 时间</option><option value="sqlite"' + (item.type === 'sqlite' ? ' selected' : '') + '>SQLite 数据库</option><option value="github"' + (item.type === 'github' ? ' selected' : '') + '>GitHub</option><option value="custom"' + (item.type === 'custom' ? ' selected' : '') + '>自定义</option></select></div>' +
           '<div><div class="mcp-field-label">标识</div><input type="text" class="ipt mcp-id" placeholder="filesystem" value="' + escapeAttr(item.id || '') + '"></div>' +
           '<div><div class="mcp-field-label">显示名称</div><input type="text" class="ipt mcp-name" placeholder="本地文件" value="' + escapeAttr(item.name || '') + '"></div>' +
           '<div><div class="mcp-field-label">启动命令</div><input type="text" class="ipt mcp-command" placeholder="npx" value="' + escapeAttr(item.command || '') + '"></div>' +
-          '<div><div class="mcp-field-label">命令参数</div><textarea class="ipt mcp-args" rows="4" placeholder="-y&#10;@modelcontextprotocol/server-filesystem&#10;D:/allowed">' + escapeHtml(Array.isArray(item.args) ? item.args.join('\n') : '') + '</textarea></div>' +
-          '<div class="full"><div class="mcp-field-label">快速示例</div><div class="hint">常见写法：`npx` + `@modelcontextprotocol/server-filesystem`，或你自己的 Python/Node 启动命令。</div></div>' +
+          '<div' + fieldClass('filesystem') + '><div class="mcp-field-label">允许访问目录</div><input type="text" class="ipt mcp-allowed-dir" placeholder="D:/allowed" value="' + escapeAttr(item.allowedDir || '') + '"></div>' +
+          '<div' + fieldClass('sqlite') + '><div class="mcp-field-label">数据库文件路径</div><input type="text" class="ipt mcp-db-path" placeholder="D:/data/app.db" value="' + escapeAttr(item.dbPath || '') + '"></div>' +
+          '<div' + fieldClass('fetch', 'full') + '><div class="mcp-card-note">这个模板适合让 AI 访问网页、查询天气、读取时间/日期 API。通常不需要额外填写参数。</div></div>' +
+          '<div' + fieldClass('github', 'full') + '><div class="mcp-card-note">这个模板用于 GitHub 相关操作。若服务需要令牌，请按对应 MCP 服务文档配置环境变量。</div></div>' +
+          '<div' + fieldClass('custom', 'full') + '><div class="mcp-field-label">命令参数</div><textarea class="ipt mcp-args" rows="4" placeholder="-y&#10;@modelcontextprotocol/server-filesystem&#10;D:/allowed">' + escapeHtml(Array.isArray(item.args) ? item.args.join('\n') : '') + '</textarea></div>' +
         '</div>';
       return wrap;
+    }
+
+    function onMcpTypeChange(selectEl) {
+      const card = selectEl && selectEl.closest('.mcp-card');
+      if (!card) return;
+      const type = (selectEl.value || 'custom').toLowerCase();
+      ['filesystem', 'sqlite', 'fetch', 'github', 'custom'].forEach(function (key) {
+        const nodes = card.querySelectorAll('.mcp-field-' + key);
+        nodes.forEach(function (node) {
+          node.style.display = key === type ? '' : 'none';
+        });
+      });
+      const preset = getMcpPresetMap()[type];
+      if (preset) {
+        const idEl = card.querySelector('.mcp-id');
+        const nameEl = card.querySelector('.mcp-name');
+        const cmdEl = card.querySelector('.mcp-command');
+        if (idEl && !idEl.value.trim()) idEl.value = preset.id;
+        if (nameEl && !nameEl.value.trim()) nameEl.value = preset.name;
+        if (cmdEl && !cmdEl.value.trim()) cmdEl.value = preset.command;
+      }
     }
 
     function refreshMcpCardTitles() {
@@ -7852,6 +8163,11 @@
       refreshMcpCardTitles();
     }
 
+    function addMcpPreset(type) {
+      const preset = getMcpPresetMap()[String(type || '').toLowerCase()];
+      addMcpServerCard(preset || null);
+    }
+
     function removeMcpServerCard(btn) {
       const card = btn && btn.closest('.mcp-card');
       const el = document.getElementById('mcp-servers-list');
@@ -7867,12 +8183,17 @@
     function collectMcpServersFromUI() {
       const cards = Array.from(document.querySelectorAll('#mcp-servers-list .mcp-card'));
       return cards.map(function (card) {
+        const type = (((card.querySelector('.mcp-type') || {}).value) || 'custom').toLowerCase();
+        const allowedDir = ((card.querySelector('.mcp-allowed-dir') || {}).value || '').trim();
+        const dbPath = ((card.querySelector('.mcp-db-path') || {}).value || '').trim();
         const argsText = (card.querySelector('.mcp-args') || {}).value || '';
+        const rawArgs = argsText.split(/\r?\n/).map(function (s) { return s.trim(); }).filter(Boolean);
         return {
+          type: type,
           id: ((card.querySelector('.mcp-id') || {}).value || '').trim(),
           name: ((card.querySelector('.mcp-name') || {}).value || '').trim(),
           command: ((card.querySelector('.mcp-command') || {}).value || '').trim(),
-          args: argsText.split(/\r?\n/).map(function (s) { return s.trim(); }).filter(Boolean),
+          args: buildArgsForMcpType(type, { allowedDir: allowedDir, dbPath: dbPath, args: rawArgs }),
           enabled: !!((card.querySelector('.mcp-enabled') || {}).checked)
         };
       }).filter(function (item) {
@@ -8567,6 +8888,90 @@
         const toolsHtml = role === 'assistant' ? renderToolBlocks(m.tools) : '';
         return '<div class="chat-bubble ' + role + '" style="animation-delay:' + (i * 0.04) + 's"><div class="chat-bubble-label">' + label + '</div>' + content + toolsHtml + '</div>';
       }).join('');
+    }
+
+    let overviewChatState = {
+      key: '',
+      messages: [],
+      sending: false
+    };
+
+    function getOverviewChatContext() {
+      const userIdRaw = (document.getElementById('ov-chat-user-id')?.value || '').trim();
+      const groupIdRaw = (document.getElementById('ov-chat-group-id')?.value || '').trim();
+      const userId = /^\d+$/.test(userIdRaw) ? userIdRaw : '90000001';
+      const groupId = /^\d+$/.test(groupIdRaw) ? groupIdRaw : '';
+      return { userId, groupId };
+    }
+
+    function renderOverviewChatBody() {
+      const body = document.getElementById('ov-chat-body');
+      if (!body) return;
+      if (!overviewChatState.messages.length) {
+        body.innerHTML = '<div class="conv-empty-state"><span class="material-symbols-outlined" style="font-size:48px;opacity:.35">chat</span><span>在下方输入内容即可开始调试。开启 Agent 与 MCP 后，回复中会显示工具调用详情。</span></div>';
+      } else {
+        body.innerHTML = renderChatBubbles(overviewChatState.messages);
+      }
+      if (overviewChatState.sending) {
+        body.innerHTML += '<div class="chat-bubble assistant typing"><div class="chat-bubble-label">' + escapeHtml(getBotDisplayName()) + '</div>正在思考并按需调用工具…</div>';
+      }
+      body.scrollTop = body.scrollHeight;
+    }
+
+    function onOverviewChatKeydown(e) {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        sendOverviewChat();
+      }
+    }
+
+    async function sendOverviewChat() {
+      const input = document.getElementById('ov-chat-input');
+      const btn = document.getElementById('ov-chat-send');
+      const text = (input?.value || '').trim();
+      if (!text || overviewChatState.sending) return;
+      const ctx = getOverviewChatContext();
+      overviewChatState.sending = true;
+      if (btn) btn.disabled = true;
+      overviewChatState.messages.push({ role: 'user', content: text });
+      renderOverviewChatBody();
+      if (input) input.value = '';
+      try {
+        const res = await fetch(BASE + '/agent/online-chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            text,
+            userId: ctx.userId,
+            groupId: ctx.groupId
+          })
+        });
+        const data = await res.json();
+        if (!data.success) {
+          toast(data.error || '在线对话失败', 'error');
+          overviewChatState.messages.push({ role: 'assistant', content: '请求失败：' + (data.error || '未知错误') });
+        } else {
+          overviewChatState.key = data.key || '';
+          overviewChatState.messages = Array.isArray(data.messages) ? data.messages : overviewChatState.messages.concat([{ role: 'assistant', content: data.reply || '' }]);
+          toast('回复已返回' + ((data.toolCount || 0) > 0 ? `（调用 ${data.toolCount} 个工具）` : ''), 'success');
+        }
+      } catch (e) {
+        toast('在线对话失败', 'error');
+        overviewChatState.messages.push({ role: 'assistant', content: '请求失败：网络异常。' });
+      } finally {
+        overviewChatState.sending = false;
+        if (btn) btn.disabled = false;
+        renderOverviewChatBody();
+      }
+    }
+
+    function openOverviewChatInConversations() {
+      if (!overviewChatState.key) {
+        toast('请先在在线对话里发送一条消息', 'warn');
+        return;
+      }
+      navigatePage('conversations', document.querySelector('[data-page=conversations]'));
+      setTimeout(function () { loadConvDetail(overviewChatState.key, true); }, 120);
     }
 
     function loadConvDetail(key, silent) {

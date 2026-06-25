@@ -4524,6 +4524,90 @@ const plugin_init = async (ctxOrCore, _obContext, _actions, _instance) => {
         }
       });
 
+      router.postNoAuth('/agent/online-chat', async (req, res) => {
+        try {
+          const cfg = pluginState.config || {};
+          const body = req.body || {};
+          const text = String(body.text || '').trim().slice(0, 4000);
+          if (!text) {
+            res.json({ success: false, error: '请输入消息内容' });
+            return;
+          }
+
+          const groupIdRaw = String(body.groupId || '').trim();
+          const groupId = /^\d+$/.test(groupIdRaw) ? groupIdRaw : '';
+          const userIdRaw = String(body.userId || '').trim();
+          const userId = /^\d+$/.test(userIdRaw) ? userIdRaw : '90000001';
+          const userName = String(body.userName || '在线调试').trim().slice(0, 32);
+          const groupName = String(body.groupName || 'MCP 调试群').trim().slice(0, 32);
+
+          const key = getConversationKey(groupId || null, userId);
+          touchConversationMeta(key, {
+            userId,
+            userName,
+            groupId: groupId || null,
+            groupName: groupId ? groupName : ''
+          });
+
+          const history = getHistory(key);
+          let systemContent = (cfg.systemPrompt || DEFAULT_CONFIG.systemPrompt).trim() || '你是友好助手。';
+          if (cfg.skillsEnabled) {
+            systemContent += buildAgentSystemExtras(cfg, __dirname, text);
+          }
+          const messages = [
+            { role: 'system', content: systemContent },
+            ...history.map((h) => ({ role: h.role, content: h.content })),
+            { role: 'user', content: text.slice(0, 2000) }
+          ];
+
+          let replyText = '';
+          let agentToolTrace = [];
+          if (cfg.agentToolsEnabled) {
+            await ensureAgentMcpHub(cfg);
+            const maxRounds = Math.max(1, Math.min(12, Number(cfg.agentMaxToolRounds) || 6));
+            const agentResult = await runAgentToolLoop({
+              messages,
+              chatCompletion,
+              cfg,
+              mcpHub: pluginState.mcpHub,
+              builtinTools: buildBuiltinTools(cfg, __dirname),
+              runtime: { cfg, webSearchMulti, pluginRoot: __dirname },
+              maxRounds,
+              onToolExecuted: (t) => log('info', '在线调试工具调用', t, 'agent')
+            });
+            replyText = String(agentResult.content || '').trim();
+            agentToolTrace = agentResult.toolTrace || [];
+          } else {
+            const result = await chatCompletion(messages, { usageKey: key });
+            if (result && typeof result === 'object') {
+              replyText = result.content !== undefined ? String(result.content || '') : String(result.text || '');
+            } else {
+              replyText = String(result || '');
+            }
+          }
+
+          if (!replyText) replyText = cfg.messages?.error || DEFAULT_CONFIG.messages.error;
+
+          pushHistory(key, 'user', text);
+          const assistantTools = [];
+          if (agentToolTrace.length) assistantTools.push(...toolTraceToHistoryMeta(agentToolTrace));
+          pushHistory(key, 'assistant', replyText, assistantTools.length ? { tools: assistantTools } : {});
+
+          const out = getHistory(key).slice(-40);
+          res.json({
+            success: true,
+            key,
+            reply: replyText,
+            messages: out,
+            toolCount: assistantTools.length,
+            mcpEnabled: !!cfg.mcpEnabled,
+            agentToolsEnabled: !!cfg.agentToolsEnabled
+          });
+        } catch (e) {
+          res.json({ success: false, error: e?.message || String(e) });
+        }
+      });
+
       router.postNoAuth('/agent/mcp/test', async (req, res) => {
         try {
           const serverId = String(req.body?.serverId || req.body?.id || '').trim();
