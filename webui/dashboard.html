@@ -772,6 +772,13 @@
     .conv-item-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
     .conv-item-user { font-size: 13px; font-weight: 600; }
     .conv-item-badge { font-size: 10px; padding: 2px 6px; border-radius: 4px; background: var(--bg2); color: var(--text2); border: 1px solid var(--border); }
+    .conv-item-actions { display: inline-flex; align-items: center; gap: 6px; }
+    .conv-item-delete {
+      width: 22px; height: 22px; border-radius: 6px; border: 1px solid var(--border);
+      background: transparent; color: var(--text3); display: inline-flex; align-items: center; justify-content: center;
+      cursor: pointer;
+    }
+    .conv-item-delete:hover { color: #f87171; border-color: color-mix(in srgb, #f87171 45%, var(--border)); background: rgba(248,113,113,0.08); }
     .conv-item-meta { font-size: 11px; color: var(--text3); display: flex; gap: 8px; flex-wrap: wrap; }
     .conv-item-preview { font-size: 12px; color: var(--text2); margin-top: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .conv-chat { flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 12px; min-height: 400px; }
@@ -2402,6 +2409,84 @@
       border: 1px solid var(--border); border-radius: 999px; font-size: 12px;
       color: var(--text2); background: var(--card);
     }
+    .ov-attach-preview {
+      margin-top: 8px;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: var(--bg2);
+      overflow: hidden;
+    }
+    .ov-attach-preview summary {
+      cursor: pointer;
+      padding: 8px 10px;
+      font-size: 12px;
+      color: var(--text2);
+    }
+    .ov-attach-preview-body { padding: 8px 10px; border-top: 1px solid var(--border); }
+    .ov-attach-preview-body textarea {
+      width: 100%;
+      min-height: 90px;
+      resize: vertical;
+      background: var(--card);
+      border: 1px solid var(--border);
+      color: var(--text);
+      border-radius: 8px;
+      padding: 8px;
+      font-size: 12px;
+      box-sizing: border-box;
+    }
+    .ov-attach-thumb {
+      max-width: 220px;
+      max-height: 120px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      display: block;
+    }
+    .cookie-guide {
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 10px 12px;
+      margin-bottom: 10px;
+      background: var(--bg2);
+      font-size: 12px;
+      color: var(--text2);
+    }
+    .cookie-guide b { color: var(--text); }
+    .cookie-site-card {
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      background: var(--card);
+      margin-bottom: 12px;
+      overflow: hidden;
+    }
+    .cookie-site-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 12px 14px;
+      border-bottom: 1px solid var(--border);
+      background: var(--bg2);
+    }
+    .cookie-site-title { font-size: 13px; font-weight: 700; color: var(--text); }
+    .cookie-site-body { padding: 12px 14px; }
+    .cookie-domains-row { margin-bottom: 10px; }
+    .cookie-domains-label { font-size: 12px; color: var(--text2); margin-bottom: 6px; }
+    .cookie-domains-hint { font-size: 11px; color: var(--text3); margin-top: 5px; }
+    .cookie-table-head, .cookie-table-row {
+      display: grid;
+      grid-template-columns: 1fr 1.1fr .55fr .6fr .7fr .75fr .95fr auto;
+      gap: 6px;
+      align-items: center;
+    }
+    .cookie-table-head {
+      font-size: 11px;
+      color: var(--text3);
+      padding: 0 2px 4px;
+    }
+    .cookie-table-row { margin-top: 6px; }
+    .cookie-flag { font-size: 11px; color: var(--text2); display: inline-flex; gap: 4px; align-items: center; }
+    .cookie-site-foot { margin-top: 10px; display: flex; justify-content: flex-start; }
     .ov-chat-send-btn {
       min-width: 38px; width: 38px; height: 38px; border-radius: 10px;
       display: inline-flex; align-items: center; justify-content: center; padding: 0;
@@ -4155,7 +4240,7 @@
         </div>
         <div class="sidebar-brand-text">
           <h1>Chat Bot</h1>
-          <span id="sidebar-version">NapCat 插件 · v2.7.2</span>
+          <span id="sidebar-version">NapCat 插件 · v2.7.3</span>
         </div>
       </div>
       <nav class="sidebar-nav">
@@ -9029,9 +9114,13 @@
       const groupLine = c.groupId ? escapeHtml(c.groupName || '群 ' + c.groupId) : '私聊';
       const safeKey = escapeHtml(c.key).replace(/'/g, "\\'");
       return '<div class="conv-item' + (isActive ? ' active' : '') + '" style="animation-delay:' + (i * 0.025) + 's" onclick="loadConvDetail(\'' + safeKey + '\')">' +
-        '<div class="conv-item-top"><span class="conv-item-user">' + displayName + isoBadge + '</span><span class="conv-item-badge">' + typeLabel + '</span></div>' +
+        '<div class="conv-item-top"><span class="conv-item-user">' + displayName + isoBadge + '</span><span class="conv-item-actions"><span class="conv-item-badge">' + typeLabel + '</span><button type="button" class="conv-item-delete" title="删除该会话" onclick="event.stopPropagation();deleteConversationFromList(\'' + safeKey + '\')"><span class="material-symbols-outlined" style="font-size:14px">delete</span></button></span></div>' +
         '<div class="conv-item-meta"><span>' + groupLine + '</span><span>' + (c.messageCount || 0) + ' 条</span><span>' + escapeHtml(last) + '</span></div>' +
         '<div class="conv-item-preview">' + preview + '</div></div>';
+    }
+
+    function deleteConversationFromList(key) {
+      clearOneConversation(key);
     }
 
     function filterConvList() {
@@ -9188,7 +9277,19 @@
         const label = role === 'user' ? '用户' : botName;
         const content = escapeHtml(m.content || '').replace(/\n/g, '<br>');
         const toolsHtml = role === 'assistant' ? renderToolBlocks(m.tools) : '';
-        return '<div class="chat-bubble ' + role + '" style="animation-delay:' + (i * 0.04) + 's"><div class="chat-bubble-label">' + label + '</div>' + content + toolsHtml + '</div>';
+        const atts = Array.isArray(m.attachments) ? m.attachments : [];
+        const attHtml = role === 'user' && atts.length
+          ? '<div style="margin-top:8px">' + atts.map(function (a, ai) {
+            if (a.kind === 'image' && a.previewUrl) {
+              return '<details class="ov-attach-preview" open><summary>图片 · ' + escapeHtml(a.name || ('image-' + (ai + 1))) + '</summary><div class="ov-attach-preview-body"><img class="ov-attach-thumb" src="' + escapeHtml(a.previewUrl) + '" alt="' + escapeHtml(a.name || 'image') + '" /></div></details>';
+            }
+            const snippet = String(a.textSnippet || '').slice(0, 4000);
+            return '<details class="ov-attach-preview"><summary>文件 · ' + escapeHtml(a.name || ('file-' + (ai + 1))) + '</summary><div class="ov-attach-preview-body">' +
+              (snippet ? ('<textarea readonly>' + escapeHtml(snippet) + '</textarea>') : '<div style="font-size:12px;color:var(--text3)">无可预览文本内容</div>') +
+              '</div></details>';
+          }).join('') + '</div>'
+          : '';
+        return '<div class="chat-bubble ' + role + '" style="animation-delay:' + (i * 0.04) + 's"><div class="chat-bubble-label">' + label + '</div>' + content + attHtml + toolsHtml + '</div>';
       }).join('');
     }
 
@@ -9377,25 +9478,27 @@
         body.innerHTML = '<div class="mcp-empty">暂无站点配置。点击下方“新增站点”开始。</div>';
         return;
       }
-      body.innerHTML = browserCookieSitesEditor.map(function (site, i) {
+      body.innerHTML = '<div class="cookie-guide"><b>步骤 1</b> 填域名（可逗号多个） → <b>步骤 2</b> 填 Cookie 键值 → <b>步骤 3</b> 保存。<br>示例：<code>bilibili.com,www.bilibili.com</code> 会同时用于这两个域名。</div>' + browserCookieSitesEditor.map(function (site, i) {
         const cookiesHtml = (site.cookies || []).map(function (c, j) {
-          return '<div style="display:grid;grid-template-columns:1.2fr 1.2fr .7fr .6fr .6fr .7fr .9fr auto;gap:6px;margin-top:6px">' +
+          return '<div class="cookie-table-row">' +
             '<input class="ipt" placeholder="name" value="' + escapeHtml(c.name || '') + '" oninput="browserCookieSitesEditor[' + i + '].cookies[' + j + '].name=this.value" />' +
             '<input class="ipt" placeholder="value" value="' + escapeHtml(c.value || '') + '" oninput="browserCookieSitesEditor[' + i + '].cookies[' + j + '].value=this.value" />' +
             '<input class="ipt" placeholder="path" value="' + escapeHtml(c.path || '/') + '" oninput="browserCookieSitesEditor[' + i + '].cookies[' + j + '].path=this.value" />' +
-            '<label style="font-size:12px"><input type="checkbox" ' + (c.secure !== false ? 'checked' : '') + ' onchange="browserCookieSitesEditor[' + i + '].cookies[' + j + '].secure=this.checked" /> secure</label>' +
-            '<label style="font-size:12px"><input type="checkbox" ' + (c.httpOnly === true ? 'checked' : '') + ' onchange="browserCookieSitesEditor[' + i + '].cookies[' + j + '].httpOnly=this.checked" /> httpOnly</label>' +
+            '<label class="cookie-flag"><input type="checkbox" ' + (c.secure !== false ? 'checked' : '') + ' onchange="browserCookieSitesEditor[' + i + '].cookies[' + j + '].secure=this.checked" /> secure</label>' +
+            '<label class="cookie-flag"><input type="checkbox" ' + (c.httpOnly === true ? 'checked' : '') + ' onchange="browserCookieSitesEditor[' + i + '].cookies[' + j + '].httpOnly=this.checked" /> httpOnly</label>' +
             '<select class="ipt" onchange="browserCookieSitesEditor[' + i + '].cookies[' + j + '].sameSite=this.value"><option value="Lax"' + ((c.sameSite || 'Lax') === 'Lax' ? ' selected' : '') + '>Lax</option><option value="Strict"' + ((c.sameSite || '') === 'Strict' ? ' selected' : '') + '>Strict</option><option value="None"' + ((c.sameSite || '') === 'None' ? ' selected' : '') + '>None</option></select>' +
             '<input class="ipt" placeholder="expires(unix)" value="' + escapeHtml(c.expires || '') + '" oninput="browserCookieSitesEditor[' + i + '].cookies[' + j + '].expires=this.value" />' +
-            '<button type="button" class="btn btn-s" onclick="removeBrowserCookieRow(' + i + ',' + j + ')">删</button>' +
+            '<button type="button" class="btn btn-d btn-s" onclick="removeBrowserCookieRow(' + i + ',' + j + ')"><span class="material-symbols-outlined" style="font-size:15px">delete</span></button>' +
           '</div>';
         }).join('');
-        return '<div class="section" style="margin-bottom:10px">' +
-          '<div class="section-title" style="display:flex;justify-content:space-between;align-items:center">站点分组 ' + (i + 1) + '<button type="button" class="btn btn-s" onclick="removeBrowserCookieSite(' + i + ')">删除分组</button></div>' +
-          '<div class="form-row"><div class="form-label">域名列表（逗号分隔）</div><input class="ipt" placeholder="bilibili.com,www.bilibili.com" value="' + escapeHtml(site.domains || '') + '" oninput="browserCookieSitesEditor[' + i + '].domains=this.value" /></div>' +
-          '<div style="font-size:12px;color:var(--text3);margin-top:4px">示例：`bilibili.com,www.bilibili.com` 会匹配这两个域名下的页面。</div>' +
+        return '<div class="cookie-site-card">' +
+          '<div class="cookie-site-head"><div class="cookie-site-title">站点分组 ' + (i + 1) + '</div><button type="button" class="btn btn-s" onclick="removeBrowserCookieSite(' + i + ')">删除分组</button></div>' +
+          '<div class="cookie-site-body">' +
+          '<div class="cookie-domains-row"><div class="cookie-domains-label">域名列表（逗号分隔）</div><input class="ipt" placeholder="bilibili.com,www.bilibili.com" value="' + escapeHtml(site.domains || '') + '" oninput="browserCookieSitesEditor[' + i + '].domains=this.value" /><div class="cookie-domains-hint">会匹配这些域名及其页面请求。</div></div>' +
+          '<div class="cookie-table-head"><span>name</span><span>value</span><span>path</span><span>secure</span><span>httpOnly</span><span>sameSite</span><span>expires</span><span></span></div>' +
           cookiesHtml +
-          '<div style="margin-top:8px"><button type="button" class="btn btn-s" onclick="addBrowserCookieRow(' + i + ')">新增 Cookie</button></div>' +
+          '<div class="cookie-site-foot"><button type="button" class="btn btn-s" onclick="addBrowserCookieRow(' + i + ')"><span class="material-symbols-outlined" style="font-size:16px">add</span>新增 Cookie</button></div>' +
+          '</div>' +
         '</div>';
       }).join('');
     }
@@ -9448,11 +9551,17 @@
       }
       box.innerHTML = list.map(function (f, i) {
         const sizeKb = Math.max(1, Math.round((Number(f.size) || 0) / 1024));
-        return '<span class="ov-chat-attachment-chip">' +
+        const preview = f.kind === 'image' && f.previewUrl
+          ? '<details class="ov-attach-preview"><summary>预览图片</summary><div class="ov-attach-preview-body"><img class="ov-attach-thumb" src="' + escapeHtml(f.previewUrl) + '" alt="' + escapeHtml(f.name || 'image') + '" /></div></details>'
+          : (f.textSnippet ? '<details class="ov-attach-preview"><summary>预览/编辑文本内容</summary><div class="ov-attach-preview-body"><textarea oninput="overviewChatState.attachments[' + i + '].textSnippet=this.value">' + escapeHtml(f.textSnippet || '') + '</textarea></div></details>' : '');
+        return '<div>' +
+          '<span class="ov-chat-attachment-chip">' +
           '<span class="material-symbols-outlined" style="font-size:14px">' + (f.kind === 'image' ? 'image' : 'description') + '</span>' +
           '<span>' + escapeHtml(f.name || ('附件' + (i + 1))) + ' · ' + sizeKb + 'KB</span>' +
           '<button type="button" class="icon-btn sm" onclick="removeOverviewAttachment(' + i + ')"><span class="material-symbols-outlined" style="font-size:14px">close</span></button>' +
-        '</span>';
+          '</span>' +
+          preview +
+        '</div>';
       }).join('');
     }
 
@@ -9491,6 +9600,14 @@
         const item = { name: f.name, size: f.size, kind: isImage ? 'image' : 'file', mime: f.type || '' };
         if (isImage) {
           item.previewUrl = URL.createObjectURL(f);
+          try {
+            item.dataUrl = await new Promise(function (resolve, reject) {
+              const rd = new FileReader();
+              rd.onload = function () { resolve(String(rd.result || '')); };
+              rd.onerror = reject;
+              rd.readAsDataURL(f);
+            });
+          } catch (_) {}
         } else if (/^(text\/|application\/json)/i.test(f.type || '') || /\.(txt|md|json|csv|log|yaml|yml|xml|js|ts|py|java|go|rs|cpp|c|h)$/i.test(f.name || '')) {
           try {
             const text = await f.text();
@@ -9651,15 +9768,15 @@
       const input = document.getElementById('ov-chat-input');
       const btn = document.getElementById('ov-chat-send');
       const text = (overrideText != null ? String(overrideText) : (input?.value || '')).trim();
-      if (!text || overviewChatState.sending) return;
+      const attachments = Array.isArray(overviewChatState.attachments) ? overviewChatState.attachments.slice() : [];
+      if ((!text && !attachments.length) || overviewChatState.sending) return;
       const ctx = getOverviewChatContext();
       overviewChatState.sending = true;
       if (btn) btn.disabled = true;
-      const attachments = Array.isArray(overviewChatState.attachments) ? overviewChatState.attachments.slice() : [];
       if (overrideText == null) {
-        let userDisplay = text;
+        let userDisplay = text || '[仅附件]';
         if (attachments.length) userDisplay += '\n\n[附件] ' + attachments.map(function (a) { return (a.kind === 'image' ? '图片:' : '文件:') + (a.name || '未命名'); }).join('，');
-        overviewChatState.messages.push({ role: 'user', content: userDisplay });
+        overviewChatState.messages.push({ role: 'user', content: userDisplay, attachments: attachments });
       }
       renderOverviewChatBody();
       if (overrideText == null && input) input.value = '';
@@ -9678,7 +9795,8 @@
                 name: a.name,
                 size: a.size,
                 mime: a.mime || '',
-                textSnippet: a.textSnippet || ''
+                textSnippet: a.textSnippet || '',
+                dataUrl: a.kind === 'image' ? (a.dataUrl || '') : ''
               };
             })
           })
@@ -9700,6 +9818,22 @@
           }
           overviewChatState.key = data.key || '';
           const all = Array.isArray(data.messages) ? data.messages : overviewChatState.messages.concat([{ role: 'assistant', content: data.reply || '' }]);
+          if (attachments.length) {
+            for (let i = all.length - 1; i >= 0; i--) {
+              if (all[i] && all[i].role === 'user') {
+                all[i].attachments = attachments;
+                break;
+              }
+            }
+          }
+          if (Array.isArray(data.assistantTools) && data.assistantTools.length) {
+            for (let i = all.length - 1; i >= 0; i--) {
+              if (all[i] && all[i].role !== 'user') {
+                if (!Array.isArray(all[i].tools) || !all[i].tools.length) all[i].tools = data.assistantTools;
+                break;
+              }
+            }
+          }
           const last = all.length ? all[all.length - 1] : null;
           const shouldStream = last && last.role !== 'user';
           if (shouldStream) {

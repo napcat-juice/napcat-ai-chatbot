@@ -4764,10 +4764,6 @@ const plugin_init = async (ctxOrCore, _obContext, _actions, _instance) => {
           const cfg = pluginState.config || {};
           const body = req.body || {};
           const text = String(body.text || '').trim().slice(0, 4000);
-          if (!text) {
-            res.json({ success: false, error: '请输入消息内容' });
-            return;
-          }
           const rawAttachments = Array.isArray(body.attachments) ? body.attachments : [];
           const attachments = rawAttachments
             .map((a) => ({
@@ -4775,10 +4771,15 @@ const plugin_init = async (ctxOrCore, _obContext, _actions, _instance) => {
               name: String(a?.name || '').slice(0, 120),
               size: Math.max(0, Number(a?.size) || 0),
               mime: String(a?.mime || '').slice(0, 80),
-              textSnippet: String(a?.textSnippet || '').slice(0, 3000)
+              textSnippet: String(a?.textSnippet || '').slice(0, 3000),
+              dataUrl: String(a?.dataUrl || '').slice(0, 6 * 1024 * 1024)
             }))
             .filter((a) => a.name && a.size <= 10 * 1024 * 1024)
             .slice(0, 8);
+          if (!text && attachments.length === 0) {
+            res.json({ success: false, error: '请输入消息内容或上传附件' });
+            return;
+          }
 
           const groupIdRaw = String(body.groupId || '').trim();
           const groupId = /^\d+$/.test(groupIdRaw) ? groupIdRaw : '';
@@ -4799,6 +4800,24 @@ const plugin_init = async (ctxOrCore, _obContext, _actions, _instance) => {
 
           const history = getHistory(key);
           let systemContent = (cfg.systemPrompt || DEFAULT_CONFIG.systemPrompt).trim() || '你是友好助手。';
+          const imageUrls = attachments
+            .filter((a) => a.kind === 'image' && /^data:image\//i.test(a.dataUrl || ''))
+            .map((a) => a.dataUrl)
+            .slice(0, 1);
+          let imageAnalysis = '';
+          if (cfg.chatParseImage !== false && imageUrls.length) {
+            imageAnalysis = await analyzeImageWithKimi(
+              imageUrls,
+              text || '请识别图片主要内容',
+              (cfg.kimiVisionModel || KIMI_CODE_DEFAULT_MODEL).trim()
+            );
+            if (imageAnalysis) {
+              const qHint = text ? `用户问题：${text}` : '用户未附带文字';
+              systemContent += `\n\n【图片信息（在线聊天视觉模型提取）】\n${qHint}\n\n${imageAnalysis}`;
+            } else {
+              systemContent += '\n\n用户发送了图片，但视觉分析未返回有效结果。请提示用户补充文字描述。';
+            }
+          }
           if (cfg.skillsEnabled) {
             systemContent += buildAgentSystemExtras(cfg, __dirname, text);
           }
@@ -4808,7 +4827,7 @@ const plugin_init = async (ctxOrCore, _obContext, _actions, _instance) => {
             {
               role: 'user',
               content: (
-                text.slice(0, 2000) +
+                ((text || '[仅附件消息]').slice(0, 2000)) +
                 (attachments.length
                   ? ('\n\n[用户上传附件]\n' + attachments.map((a, i) => {
                     const sizeKb = Math.max(1, Math.round((a.size || 0) / 1024));
@@ -4898,9 +4917,10 @@ const plugin_init = async (ctxOrCore, _obContext, _actions, _instance) => {
 
           if (!replyText) replyText = cfg.messages?.error || DEFAULT_CONFIG.messages.error;
 
-          pushHistory(key, 'user', text);
+          pushHistory(key, 'user', text || (attachments.length ? '[仅附件消息]' : ''));
           const assistantTools = [];
           if (agentToolTrace.length) assistantTools.push(...toolTraceToHistoryMeta(agentToolTrace));
+          if (imageAnalysis) assistantTools.push({ type: 'image_vision', result: imageAnalysis });
           pushHistory(key, 'assistant', replyText, assistantTools.length ? { tools: assistantTools } : {});
 
           const out = getHistory(key).slice(-40);
@@ -4910,6 +4930,7 @@ const plugin_init = async (ctxOrCore, _obContext, _actions, _instance) => {
             reply: replyText,
             messages: out,
             toolCount: assistantTools.length,
+            assistantTools,
             mcpEnabled: !!cfg.mcpEnabled,
             agentToolsEnabled: !!cfg.agentToolsEnabled,
             riskRequest: pendingRiskRequest
