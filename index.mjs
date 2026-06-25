@@ -38,17 +38,6 @@ const KIMI_IMAGE_ANALYZE_PROMPT = '你是图片信息提取工具，不是对话
 const MAX_LOG_ENTRIES = 2000;
 const LOG_LEVELS = { debug: 0, info: 1, warn: 2, error: 3 };
 const LOG_TYPES = ['system', 'api', 'model', 'chat', 'search', 'token', 'sticker', 'image', 'fakehuman', 'config', 'reaction', 'draw'];
-/** QQ 消息表情回应常用 ID（set_msg_emoji_like），可在仪表盘扩展 */
-const DEFAULT_REACTION_EMOJIS = [
-  { id: '76', name: '赞', type: '1', glyph: '+' },
-  { id: '124', name: '爱心', type: '1', glyph: '♥' },
-  { id: '311', name: '思考', type: '1', glyph: '?' },
-  { id: '182', name: '鼓掌', type: '1', glyph: '*' },
-  { id: '271', name: 'OK', type: '1', glyph: 'o' },
-  { id: '66', name: '笑脸', type: '1', glyph: ':)' },
-  { id: '67', name: '开心', type: '1', glyph: '^' },
-  { id: '78', name: '捂脸', type: '1', glyph: 'x' }
-];
 const DEFAULT_FALLBACK_MODELS = {
   siliconflow: [
     'deepseek-ai/DeepSeek-V3.2',
@@ -100,6 +89,7 @@ const DEFAULT_FALLBACK_MODELS = {
     'glm-4.7',
     'kimi-k2.5'
   ],
+  kimi: ['kimi-for-coding'],
   custom: ['gpt-4o', 'gpt-4o-mini']
 };
 
@@ -117,6 +107,10 @@ const DEFAULT_CONFIG = {
   openaiApiKey: '',
   customApiUrl: '',
   customApiKey: '',
+  kimiApiKey: '',
+  kimiApiUrl: KIMI_CODE_API,
+  kimiModelsUrl: KIMI_CODE_MODELS_API,
+  kimiCookies: '',
   model: 'deepseek-ai/DeepSeek-V3',
   modelFallbackList: [],
   apiFailoverEnabled: false,
@@ -201,7 +195,7 @@ const DEFAULT_CONFIG = {
   afterReplyRemoveThinkingEmoji: true,
   afterReplyEmojiId: '76',
   afterReplyEmojiMode: 'replace',
-  reactionEmojiCatalog: DEFAULT_REACTION_EMOJIS,
+  reactionEmojiCatalog: [],
   imageGenEnabled: false,
   imageGenProvider: 'siliconflow',
   imageGenPreset: 'siliconflow-kolors',
@@ -233,6 +227,7 @@ const DEFAULT_CONFIG = {
   kimiVisionApiKey: '',
   kimiVisionApiUrl: KIMI_CODE_API,
   kimiVisionModelsUrl: KIMI_CODE_MODELS_API,
+  kimiVisionCookies: '',
   visionFailoverEnabled: false,
   visionFailoverRetries: 2,
   visionFailoverMaxEndpoints: 4,
@@ -314,9 +309,14 @@ let pluginState = {
   logger: null,
   actions: null,
   adapterName: '',
-  pluginManager: null
+  pluginManager: null,
+  runtimeCtx: null
 };
 let drawBotEngine = null;
+let reactionCaptureSession = null;
+
+const REACTION_CAPTURE_COUNTDOWN_MS = 5000;
+const REACTION_CAPTURE_WINDOW_MS = 45000;
 
 async function fetchJson(url, opts = {}) {
   try {
@@ -438,6 +438,46 @@ function saveConfig(ctx) {
 function extractPlainText(raw) {
   if (!raw || typeof raw !== 'string') return '';
   return raw.replace(/\[CQ:[^\]]+\]/g, '').replace(/\s+/g, ' ').trim();
+}
+
+/** 提取消息 segment 摘要，便于日志排查表情/图片等结构 */
+function summarizeMessageSegments(event) {
+  const segments = [];
+  const msg = event?.message;
+  if (Array.isArray(msg)) {
+    for (const seg of msg) {
+      if (!seg || typeof seg !== 'object') continue;
+      const type = String(seg.type || 'unknown');
+      const data = seg.data && typeof seg.data === 'object' ? { ...seg.data } : {};
+      if (type === 'image' && data.url && String(data.url).length > 200) {
+        data.url = String(data.url).slice(0, 200) + '…';
+      }
+      if (type === 'file' && data.url && String(data.url).length > 200) {
+        data.url = String(data.url).slice(0, 200) + '…';
+      }
+      segments.push({ type, data });
+    }
+  }
+  const sender = event?.sender && typeof event.sender === 'object' ? event.sender : {};
+  return {
+    message_id: event?.message_id ?? event?.message?.id ?? event?.message?.message_id ?? null,
+    group_id: event?.group_id != null ? String(event.group_id) : null,
+    user_id: event?.user_id != null ? String(event.user_id) : (sender.user_id != null ? String(sender.user_id) : null),
+    sender_nick: String(sender.nickname ?? sender.nick ?? sender.card ?? '').trim() || undefined,
+    message_type: event?.message_type ?? event?.sub_type ?? undefined,
+    post_type: event?.post_type ?? undefined,
+    raw_message: String(event?.raw_message || '').slice(0, 2000),
+    segment_count: segments.length,
+    segments
+  };
+}
+
+function logIncomingGroupMessage(event) {
+  if (!event?.group_id) return;
+  const detail = summarizeMessageSegments(event);
+  const types = detail.segments.map((s) => s.type);
+  const hasFace = types.some((t) => /face|mface|emoji|marketface/i.test(t));
+  log('info', hasFace ? '群消息入站（含表情 segment）' : '群消息入站', detail, hasFace ? 'sticker' : 'chat');
 }
 
 /** 从消息事件中提取图片：返回 { url?, file? } 列表（QQ 图可能只有 file，需后续用 get_image 解析） */
@@ -583,19 +623,57 @@ function getVisionFallbackModels(cfg) {
   return [...VISION_FALLBACK_MODELS, ...(cfg.model ? [cfg.model] : [])];
 }
 
+function isKimiCodeUrl(url) {
+  return /api\.kimi\.com\/coding/i.test(String(url || ''));
+}
+
 function getKimiVisionConfig(cfg = pluginState.config) {
   return {
     apiKey: String(cfg.kimiVisionApiKey || '').trim(),
     apiUrl: normalizeCompatChatCompletionsUrl(String(cfg.kimiVisionApiUrl || KIMI_CODE_API).trim() || KIMI_CODE_API),
-    modelsUrl: String(cfg.kimiVisionModelsUrl || KIMI_CODE_MODELS_API).trim() || KIMI_CODE_MODELS_API
+    modelsUrl: String(cfg.kimiVisionModelsUrl || KIMI_CODE_MODELS_API).trim() || KIMI_CODE_MODELS_API,
+    cookies: String(cfg.kimiVisionCookies || '').trim()
   };
 }
 
-function kimiCodeRequestHeaders(cfg = pluginState.config, extra = {}) {
-  const { apiKey } = getKimiVisionConfig(cfg);
+function getKimiChatConfig(cfg = pluginState.config) {
+  return {
+    apiKey: String(cfg.kimiApiKey || '').trim(),
+    apiUrl: normalizeCompatChatCompletionsUrl(String(cfg.kimiApiUrl || KIMI_CODE_API).trim() || KIMI_CODE_API),
+    modelsUrl: String(cfg.kimiModelsUrl || KIMI_CODE_MODELS_API).trim() || KIMI_CODE_MODELS_API
+  };
+}
+
+function kimiCodeRequestHeaders(opts = {}, extra = {}) {
+  const apiKey = String(opts.apiKey || '').trim();
+  const cookies = String(opts.cookies || '').trim();
   const headers = { 'User-Agent': KIMI_CODE_USER_AGENT, ...extra };
   if (apiKey) headers.Authorization = `Bearer ${apiKey}`;
+  if (cookies) headers.Cookie = cookies;
   return headers;
+}
+
+function chatHeadersForEndpoint(endpoint, cfg = pluginState.config, extra = {}) {
+  const provider = String(endpoint?.provider || cfg.apiProvider || 'siliconflow').toLowerCase();
+  const kimiCode = endpoint?.kimiCode || provider === 'kimi' || isKimiCodeUrl(endpoint?.apiUrl);
+  if (kimiCode) {
+    const isChatKimi = provider === 'kimi';
+    const fallbackCookies = isChatKimi ? '' : getKimiVisionConfig(cfg).cookies;
+    return kimiCodeRequestHeaders({
+      apiKey: endpoint?.apiKey,
+      cookies: isChatKimi ? '' : (endpoint?.cookies ?? fallbackCookies)
+    }, extra);
+  }
+  const headers = { ...extra };
+  if (endpoint?.apiKey) headers.Authorization = `Bearer ${endpoint.apiKey}`;
+  if (endpoint?.cookies) headers.Cookie = endpoint.cookies;
+  return headers;
+}
+
+function chatHeadersFromApiConfig(extra = {}) {
+  const cfg = pluginState.config;
+  const { apiUrl, apiKey, provider } = getApiConfig();
+  return chatHeadersForEndpoint({ apiUrl, apiKey, provider }, cfg, extra);
 }
 
 function touchConversationMeta(key, patch = {}) {
@@ -651,15 +729,19 @@ function extractKimiMessageText(message) {
   return String(message.reasoning_content || '').trim();
 }
 
-async function fetchKimiModels() {
-  const { apiKey, modelsUrl } = getKimiVisionConfig();
-  if (!apiKey) {
-    log('warn', '未配置视觉 API Key，无法加载模型列表', null, 'image');
+async function fetchKimiModels(scope = 'vision') {
+  const cfg = pluginState.config;
+  const conf = scope === 'chat' ? getKimiChatConfig(cfg) : getKimiVisionConfig(cfg);
+  if (!conf.apiKey) {
+    log('warn', scope === 'chat' ? '未配置 Kimi 对话 API Key，无法加载模型列表' : '未配置视觉 API Key，无法加载模型列表', null, scope === 'chat' ? 'api' : 'image');
     return [KIMI_CODE_DEFAULT_MODEL];
   }
   try {
-    const res = await fetch(modelsUrl, {
-      headers: kimiCodeRequestHeaders()
+    const res = await fetch(conf.modelsUrl, {
+      headers: kimiCodeRequestHeaders({
+        apiKey: conf.apiKey,
+        cookies: scope === 'chat' ? '' : conf.cookies
+      })
     });
     if (!res.ok) {
       log('warn', '视觉模型列表获取失败', { status: res.status }, 'image');
@@ -963,6 +1045,11 @@ function getApiConfig(options = {}) {
       apiUrl = (cfg.codingPlanApiUrl || CODING_PLAN_API).trim() || CODING_PLAN_API;
       apiKey = String(cfg.codingPlanApiKey || '').trim();
       if (!model) model = 'qwen3.5-plus';
+    } else if (provider === 'kimi') {
+      const kc = getKimiChatConfig(cfg);
+      apiUrl = kc.apiUrl;
+      apiKey = kc.apiKey;
+      if (!model) model = KIMI_CODE_DEFAULT_MODEL;
     } else {
       apiUrl = SILICONFLOW_API;
       apiKey = String(cfg.siliconflowApiKey || '').trim();
@@ -973,7 +1060,7 @@ function getApiConfig(options = {}) {
   return { apiUrl, apiKey, model, provider };
 }
 
-const API_PROVIDERS = ['siliconflow', 'deepseek', 'bailian', 'codingplan', 'openai', 'custom'];
+const API_PROVIDERS = ['siliconflow', 'deepseek', 'bailian', 'codingplan', 'openai', 'kimi', 'custom'];
 
 function getProviderDefaultUrl(cfg, provider) {
   const p = String(provider || 'siliconflow').toLowerCase();
@@ -981,6 +1068,7 @@ function getProviderDefaultUrl(cfg, provider) {
   if (p === 'openai') return OPENAI_API;
   if (p === 'bailian') return (cfg.bailianApiUrl || BAILIAN_API).trim() || BAILIAN_API;
   if (p === 'codingplan') return (cfg.codingPlanApiUrl || CODING_PLAN_API).trim() || CODING_PLAN_API;
+  if (p === 'kimi') return getKimiChatConfig(cfg).apiUrl;
   if (p === 'custom') return (cfg.customApiUrl || '').trim();
   return SILICONFLOW_API;
 }
@@ -991,6 +1079,7 @@ function getProviderApiKey(cfg, provider) {
   if (p === 'openai') return String(cfg.openaiApiKey || '').trim();
   if (p === 'bailian') return String(cfg.bailianApiKey || '').trim();
   if (p === 'codingplan') return String(cfg.codingPlanApiKey || '').trim();
+  if (p === 'kimi') return getKimiChatConfig(cfg).apiKey;
   if (p === 'custom') return String(cfg.customApiKey || '').trim();
   return String(cfg.siliconflowApiKey || '').trim();
 }
@@ -1010,7 +1099,9 @@ function normalizeApiPool(list) {
       provider: API_PROVIDERS.includes(provider) ? provider : 'custom',
       apiUrl: String(raw?.apiUrl || '').trim(),
       apiKey: String(raw?.apiKey || '').trim(),
-      model: String(raw?.model || '').trim()
+      model: String(raw?.model || '').trim(),
+      kimiCode: raw?.kimiCode !== false,
+      cookies: String(raw?.cookies || '').trim()
     };
   });
 }
@@ -1025,7 +1116,8 @@ function normalizeVisionPool(list) {
     apiUrl: String(raw?.apiUrl || '').trim(),
     modelsUrl: String(raw?.modelsUrl || '').trim(),
     model: String(raw?.model || KIMI_CODE_DEFAULT_MODEL).trim() || KIMI_CODE_DEFAULT_MODEL,
-    kimiCode: raw?.kimiCode !== false
+    kimiCode: raw?.kimiCode !== false,
+    cookies: String(raw?.cookies || '').trim()
   }));
 }
 
@@ -1040,7 +1132,10 @@ function resolveChatEndpoint(entry, cfg = pluginState.config) {
   if (provider === 'bailian' && !model) model = 'qwen3.5-plus';
   if (provider === 'codingplan' && !model) model = 'qwen3.5-plus';
   if (provider === 'siliconflow' && !model) model = 'deepseek-ai/DeepSeek-V3';
+  if (provider === 'kimi' && !model) model = KIMI_CODE_DEFAULT_MODEL;
   apiUrl = normalizeCompatChatCompletionsUrl(apiUrl);
+  const kimiCode = provider === 'kimi' || (entry?.kimiCode !== false && isKimiCodeUrl(apiUrl));
+  const cookies = provider === 'kimi' ? '' : String(entry?.cookies || '').trim();
   return {
     id: entry?.id || 'primary',
     name: entry?.name || '主配置',
@@ -1049,6 +1144,8 @@ function resolveChatEndpoint(entry, cfg = pluginState.config) {
     apiUrl,
     apiKey,
     model,
+    kimiCode,
+    cookies,
     isPrimary: !!entry?.isPrimary
   };
 }
@@ -1060,7 +1157,8 @@ function resolveVisionEndpoint(entry, cfg = pluginState.config) {
   );
   const modelsUrl = String(entry?.modelsUrl || '').trim() || String(cfg.kimiVisionModelsUrl || KIMI_CODE_MODELS_API).trim() || KIMI_CODE_MODELS_API;
   const model = String(entry?.model || '').trim() || String(cfg.kimiVisionModel || KIMI_CODE_DEFAULT_MODEL).trim() || KIMI_CODE_DEFAULT_MODEL;
-  const kimiCode = entry?.kimiCode !== false && /api\.kimi\.com\/coding/i.test(apiUrl);
+  const kimiCode = entry?.kimiCode !== false && isKimiCodeUrl(apiUrl);
+  const cookies = String(entry?.cookies || '').trim() || getKimiVisionConfig(cfg).cookies;
   return {
     id: entry?.id || 'vision-primary',
     name: entry?.name || '主视觉配置',
@@ -1070,6 +1168,7 @@ function resolveVisionEndpoint(entry, cfg = pluginState.config) {
     modelsUrl,
     model,
     kimiCode,
+    cookies,
     isPrimary: !!entry?.isPrimary
   };
 }
@@ -1176,11 +1275,14 @@ async function fetchWithTimeout(url, options = {}, timeoutMs = 60000) {
 
 function visionHeadersForEndpoint(endpoint, extra = {}) {
   if (endpoint?.kimiCode) {
-    const cfg = { ...pluginState.config, kimiVisionApiKey: endpoint.apiKey };
-    return kimiCodeRequestHeaders(cfg, extra);
+    return kimiCodeRequestHeaders({
+      apiKey: endpoint.apiKey,
+      cookies: endpoint.cookies ?? getKimiVisionConfig().cookies
+    }, extra);
   }
   const headers = { ...extra };
   if (endpoint?.apiKey) headers.Authorization = `Bearer ${endpoint.apiKey}`;
+  if (endpoint?.cookies) headers.Cookie = endpoint.cookies;
   return headers;
 }
 
@@ -1437,7 +1539,7 @@ async function aiGenerateSearchQuery(userMessage, historySummary) {
   try {
     const res = await fetch(apiUrl, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+      headers: chatHeadersFromApiConfig({ 'Content-Type': 'application/json' }),
       body: JSON.stringify({
         model: model || 'deepseek-ai/DeepSeek-V3',
         messages: [
@@ -1470,7 +1572,7 @@ async function aiGenerateSearchQueries(userMessage, historySummary) {
   try {
     const res = await fetch(apiUrl, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+      headers: chatHeadersFromApiConfig({ 'Content-Type': 'application/json' }),
       body: JSON.stringify({
         model: model || 'deepseek-ai/DeepSeek-V3',
         messages: [
@@ -1603,10 +1705,7 @@ async function chatCompletionOnEndpoint(messages, options, endpoint, settings) {
     try {
       res = await fetchWithTimeout(endpoint.apiUrl, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${endpoint.apiKey}`
-        },
+        headers: chatHeadersForEndpoint(endpoint, cfg, { 'Content-Type': 'application/json' }),
         body: JSON.stringify(body)
       }, settings.timeoutMs);
       text = await res.text();
@@ -1725,22 +1824,36 @@ function normalizeGroupItem(raw) {
   return { groupId, groupName, memberCount };
 }
 
+function buildQqAvatarUrl(userId, size = 100) {
+  const uid = String(userId || '').trim();
+  if (!/^\d{5,12}$/.test(uid)) return '';
+  return `https://q1.qlogo.cn/g?b=qq&nk=${uid}&s=${Math.max(40, Math.min(640, Number(size) || 100))}`;
+}
+
+function normalizeUserProfile(raw, userId = '') {
+  const uid = String(userId || raw?.user_id || raw?.uin || raw?.userId || '').trim();
+  const nickname = String(raw?.nickname ?? raw?.nick ?? raw?.nick_name ?? raw?.showName ?? '').trim();
+  let avatar = String(
+    raw?.avatar ?? raw?.avatar_url ?? raw?.avatarUrl ?? raw?.head_url ?? raw?.headUrl ?? raw?.faceUrl ?? ''
+  ).trim();
+  if (!avatar && uid) avatar = buildQqAvatarUrl(uid);
+  return { userId: uid, nickname, avatar };
+}
+
 async function fetchStrangerProfile(userId) {
   const uid = String(userId || '').trim();
   if (!uid) return null;
   try {
     const res = await callAction('get_stranger_info', { user_id: uid });
     const data = res?.data ?? res ?? {};
-    return {
-      userId: uid,
-      nickname: String(data.nickname ?? data.nick ?? data.nick_name ?? '').trim(),
-      avatar: String(data.avatar ?? data.avatar_url ?? data.head_url ?? '').trim(),
-      sex: data.sex,
-      age: data.age
-    };
+    const profile = normalizeUserProfile(data, uid);
+    if (!profile.nickname) {
+      log('debug', '陌生人信息无昵称，使用 QQ 号占位', { userId: uid, keys: Object.keys(data || {}) }, 'config');
+    }
+    return profile;
   } catch (e) {
     log('debug', '获取用户信息失败', { userId: uid, err: e.message }, 'config');
-    return { userId: uid, nickname: '', avatar: '' };
+    return normalizeUserProfile({}, uid);
   }
 }
 
@@ -1785,7 +1898,7 @@ async function searchUsersByQuery(query, limit = 20) {
       matches.push({
         userId: uid,
         nickname: item.userName || '',
-        avatar: '',
+        avatar: buildQqAvatarUrl(uid),
         fromConversation: true,
         groupName: item.groupName || ''
       });
@@ -1863,13 +1976,261 @@ async function setMessageEmojiLike(messageId, emojiId, set = true) {
 }
 
 function normalizeReactionCatalog(raw) {
-  if (!Array.isArray(raw) || !raw.length) return DEFAULT_REACTION_EMOJIS;
+  if (!Array.isArray(raw) || !raw.length) return [];
   return raw.map((item) => ({
     id: String(item.id ?? '').trim(),
     name: String(item.name || item.id || '').trim(),
     type: String(item.type || '1'),
     glyph: String(item.glyph || item.name || item.id || '?').slice(0, 4)
   })).filter((x) => x.id);
+}
+
+function extractFaceReactionsFromEvent(event) {
+  const out = [];
+  const seen = new Set();
+  const add = (id, name, meta = {}) => {
+    const idStr = String(id ?? '').trim();
+    if (!idStr || seen.has(idStr)) return;
+    seen.add(idStr);
+    const label = String(name || '').replace(/^\[|\]$/g, '').trim() || `表情${idStr}`;
+    const glyph = label.length <= 4 ? label : label.slice(0, 2);
+    out.push({ id: idStr, name: label, type: '1', glyph, ...meta });
+  };
+
+  const msg = event?.message;
+  if (Array.isArray(msg)) {
+    for (const seg of msg) {
+      const type = String(seg?.type || '').toLowerCase();
+      const d = seg?.data && typeof seg.data === 'object' ? seg.data : {};
+      const raw = d.raw && typeof d.raw === 'object' ? d.raw : {};
+      if (type === 'face') {
+        add(d.id ?? raw.faceIndex, raw.faceText || d.text, {
+          source: 'face',
+          faceType: raw.faceType ?? d.face_type
+        });
+      } else if (type === 'mface' || type === 'marketface') {
+        add(d.id ?? d.emoji_id ?? d.face_id ?? d.url, d.summary || d.name || d.title || d.emoji_name, {
+          source: type
+        });
+      }
+    }
+  }
+
+  const rawMsg = String(event?.raw_message || '');
+  for (const m of rawMsg.matchAll(/\[CQ:face[^\]]*?\bid=(\d+)/gi)) {
+    add(m[1], '');
+  }
+  return out;
+}
+
+function getReactionCapturePublic(session = reactionCaptureSession) {
+  if (!session) return null;
+  const now = Date.now();
+  let countdownRemaining = 0;
+  let captureRemaining = 0;
+  if (session.status === 'countdown' && session.countdownEndsAt) {
+    countdownRemaining = Math.max(0, Math.ceil((session.countdownEndsAt - now) / 1000));
+  }
+  if ((session.status === 'countdown' || session.status === 'waiting') && session.captureEndsAt) {
+    captureRemaining = Math.max(0, Math.ceil((session.captureEndsAt - now) / 1000));
+  }
+  return {
+    id: session.id,
+    groupId: session.groupId,
+    targetUserId: session.targetUserId,
+    status: session.status,
+    countdownRemaining,
+    captureRemaining,
+    result: session.result || null,
+    pendingEntry: session.pendingEntry || null,
+    error: session.error || null,
+    catalogSize: normalizeReactionCatalog(pluginState.config.reactionEmojiCatalog).length
+  };
+}
+
+function clearReactionCaptureTimers(session = reactionCaptureSession) {
+  if (!session) return;
+  if (session._promptTimer) clearTimeout(session._promptTimer);
+  if (session._expireTimer) clearTimeout(session._expireTimer);
+  session._promptTimer = null;
+  session._expireTimer = null;
+}
+
+function cancelReactionCapture(reason = 'cancelled') {
+  if (!reactionCaptureSession) return;
+  clearReactionCaptureTimers(reactionCaptureSession);
+  if (reactionCaptureSession.status === 'countdown' || reactionCaptureSession.status === 'waiting' || reactionCaptureSession.status === 'pending_remark') {
+    reactionCaptureSession.status = reason === 'cancelled' ? 'cancelled' : reason;
+  }
+  log('info', '表情截取会话已结束', { reason, sessionId: reactionCaptureSession.id }, 'reaction');
+}
+
+async function startReactionCapture(ctx, { groupId, userId }) {
+  const gid = String(groupId || '').trim();
+  const uid = String(userId || '').trim();
+  if (!gid || !uid) throw new Error('缺少群号或用户 QQ');
+
+  cancelReactionCapture('replaced');
+  const now = Date.now();
+  const sessionId = `cap_${now.toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
+  const session = {
+    id: sessionId,
+    groupId: gid,
+    targetUserId: uid,
+    status: 'countdown',
+    startedAt: now,
+    countdownEndsAt: now + REACTION_CAPTURE_COUNTDOWN_MS,
+    captureEndsAt: now + REACTION_CAPTURE_COUNTDOWN_MS + REACTION_CAPTURE_WINDOW_MS,
+    result: null,
+    error: null
+  };
+  reactionCaptureSession = session;
+
+  session._promptTimer = setTimeout(async () => {
+    if (!reactionCaptureSession || reactionCaptureSession.id !== sessionId) return;
+    if (reactionCaptureSession.status !== 'countdown') return;
+    reactionCaptureSession.status = 'waiting';
+    const prompt = `[CQ:at,qq=${uid}] 请在 ${Math.round(REACTION_CAPTURE_WINDOW_MS / 1000)} 秒内发送一个 QQ 表情（单个 emoji 即可），我将收录到表情回应库~`;
+    try {
+      await sendGroup(ctx, gid, prompt);
+      log('info', '表情截取：已 @ 用户请求发送表情', { groupId: gid, userId: uid }, 'reaction');
+    } catch (e) {
+      reactionCaptureSession.status = 'error';
+      reactionCaptureSession.error = e.message || '发送群提示失败';
+      clearReactionCaptureTimers(reactionCaptureSession);
+    }
+  }, REACTION_CAPTURE_COUNTDOWN_MS);
+
+  session._expireTimer = setTimeout(() => {
+    if (!reactionCaptureSession || reactionCaptureSession.id !== sessionId) return;
+    if (reactionCaptureSession.status !== 'countdown' && reactionCaptureSession.status !== 'waiting') return;
+    reactionCaptureSession.status = 'timeout';
+    reactionCaptureSession.error = '超时未收到表情';
+    clearReactionCaptureTimers(reactionCaptureSession);
+    log('warn', '表情截取超时', { groupId: gid, userId: uid }, 'reaction');
+  }, REACTION_CAPTURE_COUNTDOWN_MS + REACTION_CAPTURE_WINDOW_MS);
+
+  log('info', '表情截取会话开始', {
+    groupId: gid,
+    userId: uid,
+    countdownSec: REACTION_CAPTURE_COUNTDOWN_MS / 1000,
+    windowSec: REACTION_CAPTURE_WINDOW_MS / 1000
+  }, 'reaction');
+  return session;
+}
+
+function updateReactionCatalogEntry(id, patch, ctx) {
+  const cfg = pluginState.config;
+  const catalog = normalizeReactionCatalog(cfg.reactionEmojiCatalog);
+  const idStr = String(id || '').trim();
+  const idx = catalog.findIndex((e) => String(e.id) === idStr);
+  if (idx < 0) return { ok: false, error: '表情不存在', entry: null };
+  const prev = catalog[idx];
+  const name = patch.name != null ? String(patch.name).trim() : prev.name;
+  if (!name) return { ok: false, error: '备注不能为空', entry: null };
+  const updated = {
+    ...prev,
+    name,
+    glyph: String(patch.glyph != null ? patch.glyph : name).slice(0, 4) || prev.glyph
+  };
+  catalog[idx] = updated;
+  cfg.reactionEmojiCatalog = catalog;
+  saveConfig(ctx);
+  return { ok: true, entry: updated };
+}
+
+function removeReactionCatalogEntry(id, ctx) {
+  const cfg = pluginState.config;
+  const catalog = normalizeReactionCatalog(cfg.reactionEmojiCatalog);
+  const idStr = String(id || '').trim();
+  const next = catalog.filter((e) => String(e.id) !== idStr);
+  if (next.length === catalog.length) return { ok: false, error: '表情不存在' };
+  cfg.reactionEmojiCatalog = next;
+  saveConfig(ctx);
+  return { ok: true, catalog: next };
+}
+
+function appendReactionCatalogEntry(entry, ctx) {
+  const cfg = pluginState.config;
+  const catalog = normalizeReactionCatalog(cfg.reactionEmojiCatalog);
+  const id = String(entry?.id || '').trim();
+  if (!id) return { added: false, duplicate: false, entry: null };
+  const existing = catalog.find((e) => String(e.id) === id);
+  if (existing) return { added: false, duplicate: true, entry: existing };
+  const normalized = {
+    id,
+    name: String(entry.name || entry.id).trim(),
+    type: String(entry.type || '1'),
+    glyph: String(entry.glyph || entry.name || entry.id || '?').slice(0, 4)
+  };
+  catalog.push(normalized);
+  cfg.reactionEmojiCatalog = catalog;
+  saveConfig(ctx);
+  return { added: true, duplicate: false, entry: normalized };
+}
+
+async function tryHandleReactionCapture(ctx, event, groupId, userId) {
+  const session = reactionCaptureSession;
+  if (!session || session.status !== 'waiting') return false;
+  if (String(groupId) !== session.groupId) return false;
+  if (String(userId) !== session.targetUserId) return false;
+
+  const faces = extractFaceReactionsFromEvent(event);
+  if (!faces.length) return false;
+
+  const picked = faces[0];
+  clearReactionCaptureTimers(session);
+
+  const catalog = normalizeReactionCatalog(pluginState.config.reactionEmojiCatalog);
+  const existing = catalog.find((e) => String(e.id) === String(picked.id));
+  if (existing) {
+    session.result = existing;
+    session.status = 'duplicate';
+    session.error = '该表情 ID 已在库中';
+    log('info', '表情截取：重复 ID', { entry: session.result }, 'reaction');
+    try {
+      await sendGroup(ctx, session.groupId, `[CQ:at,qq=${session.targetUserId}] 表情「${session.result.name}」(ID: ${session.result.id}) 已在表情库中~`);
+    } catch (_) { /* ignore */ }
+    return true;
+  }
+
+  session.pendingEntry = picked;
+  session.result = picked;
+  session.status = 'pending_remark';
+  log('info', '表情截取成功，等待填写备注', {
+    entry: picked,
+    faceCount: faces.length,
+    raw_message: String(event?.raw_message || '').slice(0, 200)
+  }, 'reaction');
+  try {
+    await sendGroup(ctx, session.groupId, `[CQ:at,qq=${session.targetUserId}] 已收到表情 (ID: ${picked.id})，请在插件面板填写备注后收录~`);
+  } catch (_) { /* ignore */ }
+  return true;
+}
+
+async function confirmReactionCaptureRemark(ctx, name) {
+  const session = reactionCaptureSession;
+  if (!session || session.status !== 'pending_remark') {
+    throw new Error('当前没有待确认的表情');
+  }
+  const remark = String(name || '').trim();
+  if (!remark) throw new Error('请填写备注');
+  const base = session.pendingEntry || session.result;
+  if (!base?.id) throw new Error('截取数据无效');
+  const mergeResult = appendReactionCatalogEntry({
+    ...base,
+    name: remark,
+    glyph: remark.length <= 4 ? remark : remark.slice(0, 2)
+  }, ctx);
+  if (!mergeResult.added) throw new Error(mergeResult.duplicate ? '该表情 ID 已在库中' : '收录失败');
+  session.result = mergeResult.entry;
+  session.status = 'captured';
+  session.pendingEntry = null;
+  log('info', '表情截取已确认收录', { entry: session.result }, 'reaction');
+  try {
+    await sendGroup(ctx, session.groupId, `[CQ:at,qq=${session.targetUserId}] 已收录表情「${session.result.name}」(ID: ${session.result.id}) 到表情回应库~`);
+  } catch (_) { /* ignore */ }
+  return session.result;
 }
 
 /** 思考阶段：发文字提示和/或在用户消息上贴表情回应 */
@@ -1975,7 +2336,7 @@ async function aiDecidePoke(userText, replyText) {
   try {
     const res = await fetch(apiUrl, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+      headers: chatHeadersFromApiConfig({ 'Content-Type': 'application/json' }),
       body: JSON.stringify({
         model: model || 'deepseek-ai/DeepSeek-V3',
         messages: [
@@ -2011,7 +2372,7 @@ async function aiPickStickerIndex(userText, replyText, totalCount) {
   try {
     const res = await fetch(apiUrl, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+      headers: chatHeadersFromApiConfig({ 'Content-Type': 'application/json' }),
       body: JSON.stringify({
         model: model || 'deepseek-ai/DeepSeek-V3',
         messages: [
@@ -2041,14 +2402,16 @@ async function aiPickStickerIndex(userText, replyText, totalCount) {
 function parseCustomFaceItem(item) {
   if (item == null) return null;
   if (typeof item === 'object') {
-    const id = item.id ?? item.face_id ?? item.faceId ?? item.resId ?? item.res_id ?? item.qid ?? item.url ?? item.file;
-    const preview = item.url || item.preview || item.file || item.thumb || item.thumbnail || '';
+    const id = item.id ?? item.face_id ?? item.faceId ?? item.qFaceId ?? item.QFaceId
+      ?? item.resId ?? item.res_id ?? item.qid ?? item.url ?? item.file;
+    const preview = item.url ?? item.preview ?? item.file ?? item.thumb ?? item.thumbnail
+      ?? item.imageUrl ?? item.image_url ?? item.path ?? item.faceUrl ?? '';
     const idStr = id != null ? String(id).trim() : '';
     if (!idStr) return null;
     return {
       id: idStr,
       preview: String(preview || (isFaceIdUrl(idStr) ? idStr : '')).trim(),
-      name: String(item.name || item.desc || item.summary || '').trim()
+      name: String(item.name || item.desc || item.summary || item.displayName || '').trim()
     };
   }
   const s = String(item).trim();
@@ -2061,18 +2424,31 @@ async function fetchCustomFacesDetailed(count = 100) {
   try {
     const n = Math.max(1, Math.min(100, Number(count) || 48));
     let list = [];
+    let source = 'none';
     try {
       const detailRes = await callAction('fetch_custom_face_detail', { count: n });
       const detailData = detailRes?.data ?? detailRes ?? {};
       if (Array.isArray(detailData)) list = detailData;
       else if (Array.isArray(detailData.faces)) list = detailData.faces;
+      else if (Array.isArray(detailData.face_list)) list = detailData.face_list;
       else if (detailData && typeof detailData === 'object') list = Object.values(detailData);
-    } catch (_) { /* fallback */ }
+      if (list.length) source = 'fetch_custom_face_detail';
+    } catch (e) {
+      log('debug', 'fetch_custom_face_detail 不可用，回退 fetch_custom_face', e.message, 'sticker');
+    }
     if (!list.length) {
       const res = await callAction('fetch_custom_face', { count: n });
       list = res?.data ?? res ?? [];
+      if (list.length) source = 'fetch_custom_face';
     }
-    if (!Array.isArray(list)) return [];
+    if (!Array.isArray(list)) list = [];
+    log('info', '收藏表情原始列表', {
+      source,
+      requested: n,
+      rawCount: list.length,
+      sampleKeys: list[0] && typeof list[0] === 'object' ? Object.keys(list[0]).slice(0, 16) : [],
+      sample: list.slice(0, 2).map((item) => (typeof item === 'object' ? item : { value: item }))
+    }, 'sticker');
     const seen = new Set();
     const out = [];
     for (const item of list) {
@@ -2081,6 +2457,11 @@ async function fetchCustomFacesDetailed(count = 100) {
       seen.add(parsed.id);
       out.push(parsed);
     }
+    log('info', '收藏表情解析完成', {
+      parsed: out.length,
+      withPreview: out.filter((f) => f.preview).length,
+      samples: out.slice(0, 3).map((f) => ({ id: f.id, preview: String(f.preview || '').slice(0, 120), name: f.name }))
+    }, 'sticker');
     return out;
   } catch (e) {
     log('warn', '拉取收藏表情失败', e.message, 'sticker');
@@ -2228,7 +2609,7 @@ async function aiChooseFakeHumanAction(recentContext) {
   try {
     const res = await fetch(apiUrl, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+      headers: chatHeadersFromApiConfig({ 'Content-Type': 'application/json' }),
       body: JSON.stringify({
         model: model || 'deepseek-ai/DeepSeek-V3',
         messages: [
@@ -2373,7 +2754,7 @@ async function tryFakeHumanReply(ctx, event, groupId, userId, plainText) {
           : { role: 'user', content: userContent };
         const res = await fetch(apiUrl, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+          headers: chatHeadersFromApiConfig({ 'Content-Type': 'application/json' }),
           body: JSON.stringify({
             model: visionModel,
             messages: [
@@ -2693,6 +3074,7 @@ const plugin_init = async (ctxOrCore, _obContext, _actions, _instance) => {
     pluginState.actions = ctx.actions || c.actions;
     pluginState.adapterName = ctx.adapterName || c.adapterName;
     pluginState.pluginManager = ctx.pluginManager || c.pluginManager;
+    pluginState.runtimeCtx = ctx;
     loadConfig(ctx);
 
     log('info', '聊天插件已初始化', { apiProvider: pluginState.config.apiProvider || 'siliconflow' }, 'system');
@@ -2767,11 +3149,15 @@ const plugin_init = async (ctxOrCore, _obContext, _actions, _instance) => {
         if (body.enabled !== undefined) cfg.enabled = bool('enabled', true);
         if (body.apiProvider !== undefined) {
           const p = str('apiProvider', 'siliconflow').toLowerCase();
-          const allowed = ['siliconflow', 'deepseek', 'bailian', 'codingplan', 'openai', 'custom'];
+          const allowed = ['siliconflow', 'deepseek', 'bailian', 'codingplan', 'openai', 'kimi', 'custom'];
           cfg.apiProvider = allowed.includes(p) ? p : 'siliconflow';
         }
         if (body.deepseekApiKey !== undefined) cfg.deepseekApiKey = str('deepseekApiKey', '');
         if (body.siliconflowApiKey !== undefined) cfg.siliconflowApiKey = str('siliconflowApiKey', '');
+        if (body.kimiApiKey !== undefined) cfg.kimiApiKey = str('kimiApiKey', '');
+        if (body.kimiApiUrl !== undefined) cfg.kimiApiUrl = str('kimiApiUrl', KIMI_CODE_API);
+        if (body.kimiModelsUrl !== undefined) cfg.kimiModelsUrl = str('kimiModelsUrl', KIMI_CODE_MODELS_API);
+        if (body.kimiCookies !== undefined) cfg.kimiCookies = str('kimiCookies', '');
         if (body.bailianApiKey !== undefined) cfg.bailianApiKey = str('bailianApiKey', '');
         if (body.bailianApiUrl !== undefined) cfg.bailianApiUrl = str('bailianApiUrl', BAILIAN_API);
         if (body.codingPlanApiKey !== undefined) cfg.codingPlanApiKey = str('codingPlanApiKey', '');
@@ -2936,6 +3322,7 @@ const plugin_init = async (ctxOrCore, _obContext, _actions, _instance) => {
         if (body.kimiVisionApiKey !== undefined) cfg.kimiVisionApiKey = str('kimiVisionApiKey', '');
         if (body.kimiVisionApiUrl !== undefined) cfg.kimiVisionApiUrl = str('kimiVisionApiUrl', KIMI_CODE_API);
         if (body.kimiVisionModelsUrl !== undefined) cfg.kimiVisionModelsUrl = str('kimiVisionModelsUrl', KIMI_CODE_MODELS_API);
+        if (body.kimiVisionCookies !== undefined) cfg.kimiVisionCookies = str('kimiVisionCookies', '');
         if (body.visionFailoverEnabled !== undefined) cfg.visionFailoverEnabled = bool('visionFailoverEnabled', false);
         if (body.visionFailoverRetries !== undefined) cfg.visionFailoverRetries = num('visionFailoverRetries', 2, 1, 10);
         if (body.visionFailoverMaxEndpoints !== undefined) cfg.visionFailoverMaxEndpoints = num('visionFailoverMaxEndpoints', 4, 1, 20);
@@ -3007,10 +3394,11 @@ const plugin_init = async (ctxOrCore, _obContext, _actions, _instance) => {
         }
       });
 
-      router.getNoAuth('/kimi/models', async (_, res) => {
+      router.getNoAuth('/kimi/models', async (req, res) => {
         try {
-          const models = await fetchKimiModels();
-          res.json({ success: true, models });
+          const scope = String(req.query?.scope || 'vision').toLowerCase() === 'chat' ? 'chat' : 'vision';
+          const models = await fetchKimiModels(scope);
+          res.json({ success: true, models, scope });
         } catch (e) {
           res.json({ success: false, models: [KIMI_CODE_DEFAULT_MODEL], error: e.message });
         }
@@ -3082,6 +3470,87 @@ const plugin_init = async (ctxOrCore, _obContext, _actions, _instance) => {
       router.getNoAuth('/reactions', (_, res) => {
         const cfg = pluginState.config;
         res.json({ success: true, data: normalizeReactionCatalog(cfg.reactionEmojiCatalog) });
+      });
+
+      router.postNoAuth('/reactions/capture/start', async (req, res) => {
+        try {
+          const groupId = String(req.body?.groupId ?? req.body?.group_id ?? '').trim();
+          const userId = String(req.body?.userId ?? req.body?.user_id ?? req.body?.qq ?? '').trim();
+          if (!groupId || !userId) {
+            return res.status(400).json({ success: false, error: '缺少群号或用户 QQ' });
+          }
+          const active = reactionCaptureSession && ['countdown', 'waiting', 'pending_remark'].includes(reactionCaptureSession.status);
+          if (active) {
+            return res.json({ success: false, error: '已有进行中的截取任务，请等待完成或取消' });
+          }
+          const ctx = pluginState.runtimeCtx;
+          if (!ctx) return res.status(503).json({ success: false, error: '插件未就绪' });
+          await startReactionCapture(ctx, { groupId, userId });
+          res.json({ success: true, session: getReactionCapturePublic() });
+        } catch (e) {
+          res.json({ success: false, error: e.message });
+        }
+      });
+
+      router.getNoAuth('/reactions/capture/status', (_, res) => {
+        res.json({
+          success: true,
+          session: getReactionCapturePublic(),
+          catalog: normalizeReactionCatalog(pluginState.config.reactionEmojiCatalog)
+        });
+      });
+
+      router.postNoAuth('/reactions/capture/cancel', (_, res) => {
+        cancelReactionCapture('cancelled');
+        res.json({ success: true, session: getReactionCapturePublic() });
+      });
+
+      router.postNoAuth('/reactions/capture/confirm', async (req, res) => {
+        try {
+          const ctx = pluginState.runtimeCtx;
+          if (!ctx) return res.status(503).json({ success: false, error: '插件未就绪' });
+          const name = String(req.body?.name ?? req.body?.remark ?? '').trim();
+          const entry = await confirmReactionCaptureRemark(ctx, name);
+          res.json({
+            success: true,
+            entry,
+            session: getReactionCapturePublic(),
+            catalog: normalizeReactionCatalog(pluginState.config.reactionEmojiCatalog)
+          });
+        } catch (e) {
+          res.json({ success: false, error: e.message });
+        }
+      });
+
+      router.postNoAuth('/reactions/catalog/update', (req, res) => {
+        try {
+          const ctx = pluginState.runtimeCtx;
+          if (!ctx) return res.status(503).json({ success: false, error: '插件未就绪' });
+          const id = String(req.body?.id ?? '').trim();
+          const name = req.body?.name ?? req.body?.remark;
+          const result = updateReactionCatalogEntry(id, { name, glyph: req.body?.glyph }, ctx);
+          if (!result.ok) return res.json({ success: false, error: result.error });
+          res.json({
+            success: true,
+            entry: result.entry,
+            catalog: normalizeReactionCatalog(pluginState.config.reactionEmojiCatalog)
+          });
+        } catch (e) {
+          res.json({ success: false, error: e.message });
+        }
+      });
+
+      router.postNoAuth('/reactions/catalog/delete', (req, res) => {
+        try {
+          const ctx = pluginState.runtimeCtx;
+          if (!ctx) return res.status(503).json({ success: false, error: '插件未就绪' });
+          const id = String(req.body?.id ?? '').trim();
+          const result = removeReactionCatalogEntry(id, ctx);
+          if (!result.ok) return res.json({ success: false, error: result.error });
+          res.json({ success: true, catalog: result.catalog });
+        } catch (e) {
+          res.json({ success: false, error: e.message });
+        }
       });
 
       router.getNoAuth('/stats', async (_, res) => {
@@ -3157,7 +3626,7 @@ const plugin_init = async (ctxOrCore, _obContext, _actions, _instance) => {
           const out = {};
           for (const id of ids.slice(0, 50)) {
             const cached = pluginState.config.userProfileCache?.[id];
-            if (cached?.nickname && Date.now() - (cached.updatedAt || 0) < 3600000) {
+            if (cached?.nickname && cached?.avatar && Date.now() - (cached.updatedAt || 0) < 3600000) {
               out[id] = { userId: id, ...cached };
               continue;
             }
@@ -3265,17 +3734,25 @@ const plugin_init = async (ctxOrCore, _obContext, _actions, _instance) => {
 };
 
 const plugin_onmessage = async (ctx, event) => {
-  const cfg = pluginState.config;
-  if (!cfg.enabled) return;
-  if (!event?.raw_message) return;
+  if (!event?.raw_message && !Array.isArray(event?.message)) return;
 
   const selfId = event.self_id != null ? String(event.self_id) : null;
   const userId = (event.user_id != null ? String(event.user_id) : (event.sender?.user_id != null ? String(event.sender.user_id) : null));
   if (!userId) return;
-  if (selfId && userId === selfId) return;
 
   const groupId = event.group_id ? String(event.group_id) : null;
   const isGroup = !!groupId;
+
+  if (isGroup && (!selfId || userId !== selfId)) {
+    if (await tryHandleReactionCapture(ctx, event, groupId, userId)) return;
+  }
+
+  if (!event?.raw_message) return;
+  if (selfId && userId === selfId) return;
+
+  const cfg = pluginState.config;
+  if (!cfg.enabled) return;
+  if (isGroup) logIncomingGroupMessage(event);
   const plainText = extractPlainText(event.raw_message).trim();
   const hasImages = extractImageFromEvent(event).length > 0;
 

@@ -562,15 +562,40 @@
     .user-profile-card .meta { line-height: 1.25; }
     .user-profile-card .meta .nick { font-weight: 600; max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .user-profile-card .meta .uid { font-size: 10px; color: var(--text3); }
-    .resolve-box { position: relative; flex: 1; max-width: 320px; }
+    .resolve-box { position: relative; flex: 1; max-width: 320px; z-index: 2; }
+    .resolve-box.is-open { z-index: 120; }
+    .section.has-open-dropdown {
+      position: relative;
+      z-index: 80;
+      overflow: visible;
+    }
+    .section.has-open-dropdown .section-body,
+    .section.has-open-dropdown .section-toolbar,
+    .section.has-open-dropdown .perm-toolbar {
+      overflow: visible;
+    }
+    .section.has-open-dropdown:hover {
+      transform: none;
+    }
     .resolve-dropdown {
-      position: absolute; left: 0; right: 0; top: calc(100% + 4px); z-index: 30;
+      position: absolute; left: 0; right: 0; top: calc(100% + 4px); z-index: 200;
       background: var(--bg2); border: 1px solid var(--border); border-radius: 10px;
-      max-height: 220px; overflow-y: auto; box-shadow: 0 8px 24px rgba(0,0,0,0.25);
+      max-height: min(280px, 50vh); overflow-y: auto; overflow-x: hidden;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.25);
+      -webkit-overflow-scrolling: touch;
     }
     .resolve-item {
       display: flex; align-items: center; gap: 10px; padding: 8px 10px; cursor: pointer;
-      border-bottom: 1px solid var(--border);
+      border-bottom: 1px solid var(--border); min-width: 0;
+    }
+    .resolve-item > div:last-child {
+      flex: 1; min-width: 0; overflow: hidden;
+    }
+    .resolve-item > div:last-child > div:first-child {
+      font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .resolve-item > div:last-child > div:last-child {
+      font-size: 11px; color: var(--text3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
     }
     .resolve-item:last-child { border-bottom: none; }
     .resolve-item:hover, .resolve-item.active { background: var(--accent-glow); }
@@ -627,35 +652,35 @@
     .log-badge.type-config { background: rgba(100,116,139,0.15); color: #64748b; }
     .log-page-body {
       max-height: calc(100vh - 240px); overflow-y: auto; overflow-x: hidden;
-      background: #060608; border: 1px solid var(--border); border-radius: var(--radius);
+      background: var(--log-bg, #060608); border: 1px solid var(--border); border-radius: var(--radius);
       font-family: 'JetBrains Mono', ui-monospace, monospace;
       font-size: 12px; line-height: 1.65;
       padding: 10px 0;
+      color: var(--log-msg, #e5e7eb);
     }
-    body.light .log-page-body { background: #0c0c0e; }
     .log-stream-line {
       padding: 3px 16px; white-space: pre-wrap; word-break: break-word;
       border-left: 3px solid transparent;
       transition: background 0.12s;
       animation: fadeSlideIn 0.18s var(--ease) both;
     }
-    .log-stream-line:hover { background: rgba(255,255,255,0.03); }
+    .log-stream-line:hover { background: var(--log-hover, rgba(255,255,255,0.03)); }
     .log-stream-line.level-warn { border-left-color: var(--warn); }
     .log-stream-line.level-error { border-left-color: var(--danger); }
-    .log-stream-line.level-info { border-left-color: rgba(96,165,250,0.35); }
-    .log-stream-line.level-debug { border-left-color: rgba(113,113,122,0.35); }
-    .log-stream-line .log-ts { color: #6b7280; }
+    .log-stream-line.level-info { border-left-color: color-mix(in srgb, var(--log-lv-info, #60a5fa) 35%, transparent); }
+    .log-stream-line.level-debug { border-left-color: color-mix(in srgb, var(--log-lv-debug, #9ca3af) 35%, transparent); }
+    .log-stream-line .log-ts { color: var(--log-ts, #6b7280); }
     .log-stream-line .log-lv { font-weight: 700; }
-    .log-stream-line .log-lv-info { color: #60a5fa; }
-    .log-stream-line .log-lv-warn { color: #fbbf24; }
-    .log-stream-line .log-lv-error { color: #f87171; }
-    .log-stream-line .log-lv-debug { color: #9ca3af; }
-    .log-stream-line .log-mod { color: #a78bfa; }
-    .log-stream-line .log-msg { color: #e5e7eb; }
-    .log-stream-line.level-warn .log-msg { color: #fde68a; }
-    .log-stream-line.level-error .log-msg { color: #fca5a5; }
+    .log-stream-line .log-lv-info { color: var(--log-lv-info, #60a5fa); }
+    .log-stream-line .log-lv-warn { color: var(--log-lv-warn, #fbbf24); }
+    .log-stream-line .log-lv-error { color: var(--log-lv-error, #f87171); }
+    .log-stream-line .log-lv-debug { color: var(--log-lv-debug, #9ca3af); }
+    .log-stream-line .log-mod { color: var(--log-mod, #a78bfa); }
+    .log-stream-line .log-msg { color: var(--log-msg, #e5e7eb); }
+    .log-stream-line.level-warn .log-msg { color: var(--log-msg-warn, #fde68a); }
+    .log-stream-line.level-error .log-msg { color: var(--log-msg-error, #fca5a5); }
     .log-detail-inline {
-      color: #9ca3af; display: inline;
+      color: var(--log-detail, #9ca3af); display: inline;
     }
     .log-terminal-head { display: none; }
     .log-row .log-time {
@@ -668,7 +693,7 @@
       align-items: start; transition: background 0.15s;
       animation: fadeSlideIn 0.2s var(--ease) both;
     }
-    .log-row:hover { background: rgba(255,255,255,0.03); }
+    .log-row:hover { background: var(--log-hover, var(--card-hover)); }
     .log-row .log-msg-col { min-width: 0; }
     .log-row .log-msg-text { color: var(--text); line-height: 1.55; word-break: break-word; font-size: 13px; }
     .log-row .log-detail-box {
@@ -679,21 +704,17 @@
       font-size: 12px; line-height: 1.65; max-height: 160px; overflow: auto;
       white-space: pre-wrap; word-break: break-word; tab-size: 2;
     }
-    .log-hl-key { color: #7dd3fc; }
-    .log-hl-str { color: #86efac; }
-    .log-hl-num { color: #fcd34d; }
-    .log-hl-kw { color: #c4b5fd; font-weight: 500; }
-    .log-hl-brace { color: var(--text3); }
-    body.light .log-hl-key { color: #0369a1; }
-    body.light .log-hl-str { color: #15803d; }
-    body.light .log-hl-num { color: #a16207; }
-    body.light .log-hl-kw { color: #7c3aed; }
+    .log-hl-key { color: var(--log-hl-key, #7dd3fc); }
+    .log-hl-str { color: var(--log-hl-str, #86efac); }
+    .log-hl-num { color: var(--log-hl-num, #fcd34d); }
+    .log-hl-kw { color: var(--log-hl-kw, #c4b5fd); font-weight: 500; }
+    .log-hl-brace { color: var(--log-ts, var(--text3)); }
     .log-image-preview {
       margin-top: 8px; max-width: 220px; max-height: 140px; border-radius: 8px;
-      border: 1px solid var(--border); object-fit: contain; background: #111;
+      border: 1px solid var(--border); object-fit: contain; background: var(--log-bg, var(--bg2));
     }
-    .log-row.level-error .log-msg-text { color: #f87171; }
-    .log-row.level-warn .log-msg-text { color: #fbbf24; }
+    .log-row.level-error .log-msg-text { color: var(--log-lv-error, var(--danger)); }
+    .log-row.level-warn .log-msg-text { color: var(--log-lv-warn, var(--warn)); }
     .log-pill {
       display: inline-flex; align-items: center; justify-content: center;
       padding: 2px 6px; border-radius: 4px; font-size: 10px; font-weight: 700; text-transform: uppercase;
@@ -1110,12 +1131,44 @@
     }
     body.dark {
       color-scheme: dark;
+      --log-bg: #060608;
+      --log-hover: rgba(255, 255, 255, 0.04);
+      --log-ts: #6b7280;
+      --log-msg: #e5e7eb;
+      --log-msg-warn: #fde68a;
+      --log-msg-error: #fca5a5;
+      --log-detail: #9ca3af;
+      --log-lv-info: #60a5fa;
+      --log-lv-warn: #fbbf24;
+      --log-lv-error: #f87171;
+      --log-lv-debug: #9ca3af;
+      --log-mod: #a78bfa;
+      --log-hl-key: #7dd3fc;
+      --log-hl-str: #86efac;
+      --log-hl-num: #fcd34d;
+      --log-hl-kw: #c4b5fd;
     }
     body.light {
       color-scheme: light;
       background:
         radial-gradient(circle at top center, rgba(0,0,0,0.03), transparent 340px),
         var(--bg);
+      --log-bg: #f4f4f5;
+      --log-hover: rgba(0, 0, 0, 0.045);
+      --log-ts: #71717a;
+      --log-msg: #18181b;
+      --log-msg-warn: #92400e;
+      --log-msg-error: #b91c1c;
+      --log-detail: #52525b;
+      --log-lv-info: #2563eb;
+      --log-lv-warn: #ca8a04;
+      --log-lv-error: #dc2626;
+      --log-lv-debug: #71717a;
+      --log-mod: #7c3aed;
+      --log-hl-key: #0369a1;
+      --log-hl-str: #15803d;
+      --log-hl-num: #a16207;
+      --log-hl-kw: #7c3aed;
     }
     .layout { background: var(--bg); min-height: calc(100dvh - 64px); }
     ::selection { background: var(--text); color: var(--bg); }
@@ -1296,7 +1349,7 @@
     .section {
       padding: 0;
       margin-bottom: 16px;
-      overflow: hidden;
+      overflow: visible;
     }
     .section:hover { border-color: var(--border); }
     .section-title,
@@ -1314,6 +1367,8 @@
     }
     .section-body {
       padding: 18px 18px 18px;
+      overflow: visible;
+      position: relative;
     }
     .section > .section-body {
       padding: 18px 18px 18px;
@@ -1573,7 +1628,7 @@
       font-size: 13px;
     }
     .log-sidebar-body {
-      background: var(--bg);
+      background: var(--log-bg, var(--bg));
       padding: 10px;
     }
     .log-entry {
@@ -1589,7 +1644,7 @@
       color: var(--text2) !important;
     }
     .log-page-body {
-      background: var(--bg);
+      background: var(--log-bg, var(--bg));
       border-color: var(--border);
       border-radius: var(--radius);
     }
@@ -1986,11 +2041,31 @@
       display: flex; align-items: center; gap: 8px; text-align: left;
       padding: 10px 12px; min-height: 52px;
     }
+    .perm-user-card img, .perm-user-card .avatar-ph {
+      width: 24px; height: 24px; border-radius: 50%; object-fit: cover; flex-shrink: 0;
+      background: var(--bg); display: flex; align-items: center; justify-content: center; font-size: 11px;
+    }
+    .user-profile-card img + .avatar-ph { display: none !important; }
+    .resolve-item img + .avatar-ph { display: none !important; width: 32px; height: 32px; }
+    .resolve-item img.avatar-broken + .avatar-ph,
+    .resolve-item img[style*="display: none"] + .avatar-ph,
+    .user-profile-card img[style*="display: none"] + .avatar-ph { display: flex !important; }
     @media (max-width: 900px) {
       .conv-toolbar { grid-template-columns: 1fr 1fr; }
       .conv-toolbar .search-input-wrap { grid-column: 1 / -1; }
       .msg-template-grid { grid-template-columns: 1fr; }
       .form-row { grid-template-columns: 1fr; }
+      .section-toolbar .resolve-box,
+      .perm-toolbar .resolve-box {
+        flex: 1 1 100%;
+        max-width: none;
+        min-width: 0;
+      }
+      .resolve-dropdown {
+        max-height: min(320px, 55vh);
+        z-index: 300;
+      }
+      .section.has-open-dropdown { z-index: 100; }
     }
     .conv-stats-bar {
       padding: 8px 16px 12px; font-size: 12px; color: var(--text3);
@@ -2388,7 +2463,7 @@
       max-height: calc(100dvh - 300px);
       min-height: 420px;
       border: none; border-radius: 0;
-      background: #060608;
+      background: var(--log-bg, #060608);
     }
     #pg-logs .log-stream-line {
       animation: logRowIn 0.22s var(--ease) both;
@@ -2644,8 +2719,27 @@
       overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
     }
     .reaction-emoji-actions {
-      margin-top: 10px; display: flex; justify-content: center; gap: 6px;
+      margin-top: 10px; display: flex; justify-content: center; gap: 4px; flex-wrap: wrap;
     }
+    .reaction-emoji-actions .icon-btn.delete-btn {
+      color: #f87171;
+      border-color: rgba(239,68,68,0.35);
+    }
+    .reaction-emoji-actions .icon-btn.delete-btn:hover {
+      background: rgba(239,68,68,0.12);
+    }
+    .reaction-emoji-card.editing {
+      border-color: var(--accent);
+      background: color-mix(in srgb, var(--accent) 6%, var(--bg2));
+    }
+    .reaction-emoji-edit-input {
+      width: 100%; font-size: 11px; padding: 4px 6px; margin-top: 2px;
+      text-align: center;
+    }
+    .reaction-capture-remark-row {
+      display: flex; gap: 8px; align-items: center; margin-top: 10px;
+    }
+    .reaction-capture-remark-row .ipt { flex: 1; min-width: 0; }
     .reaction-emoji-actions .icon-btn.thinking-on {
       color: var(--accent2); border-color: color-mix(in srgb, var(--accent2) 50%, var(--border));
       background: color-mix(in srgb, var(--accent2) 14%, transparent);
@@ -2708,6 +2802,19 @@
     .reaction-emoji-modal-grid {
       display: grid; grid-template-columns: repeat(auto-fill, minmax(88px, 1fr)); gap: 10px;
     }
+    .reaction-capture-status {
+      margin-top: 14px; padding: 14px 16px; border-radius: 12px;
+      border: 1px solid var(--border); background: var(--bg2);
+      font-size: 13px; line-height: 1.5;
+    }
+    .reaction-capture-status.active { border-color: var(--accent); }
+    .reaction-capture-status.success { border-color: rgba(34,197,94,0.45); background: rgba(34,197,94,0.08); }
+    .reaction-capture-status.error { border-color: rgba(239,68,68,0.45); background: rgba(239,68,68,0.08); }
+    .reaction-capture-countdown {
+      font-size: 28px; font-weight: 700; font-variant-numeric: tabular-nums;
+      color: var(--accent); margin: 8px 0 4px;
+    }
+    .reaction-capture-hint { font-size: 12px; color: var(--text3); margin: 0; }
     .kv-editor-inline {
       width: 100%;
       display: flex;
@@ -2789,6 +2896,32 @@
     </div>
   </div>
 
+  <div class="modal-overlay" id="reaction-capture-modal" onclick="closeReactionCaptureModal(event)">
+    <div class="modal-panel" role="dialog" aria-labelledby="reaction-capture-title" onclick="event.stopPropagation()">
+      <div class="modal-head">
+        <h3 id="reaction-capture-title">从群聊截取表情</h3>
+        <button type="button" class="icon-btn sm" title="关闭" onclick="closeReactionCaptureModal()"><span class="material-symbols-outlined">close</span></button>
+      </div>
+      <div class="modal-body">
+        <p style="font-size:12px;color:var(--text3);margin:0 0 14px">选择目标群与要 @ 的用户 QQ。截取成功后请填写备注，点击铅笔图标确认收录。</p>
+        <div class="form-row" style="margin-bottom:12px">
+          <div class="form-label">目标群</div>
+          <select class="ipt" id="reaction-capture-group" style="max-width:100%"></select>
+        </div>
+        <div class="form-row" style="margin-bottom:12px">
+          <div class="form-label">用户 QQ<div class="hint">被 @ 并在群里发表情的账号</div></div>
+          <input type="text" class="ipt" id="reaction-capture-user" placeholder="3042444341" style="max-width:100%" inputmode="numeric" />
+        </div>
+        <div id="reaction-capture-status" class="reaction-capture-status" style="display:none"></div>
+      </div>
+      <div class="modal-foot">
+        <button type="button" class="icon-btn sm" id="reaction-capture-cancel-btn" title="取消截取" onclick="cancelReactionCapture()" style="display:none"><span class="material-symbols-outlined">stop</span></button>
+        <button type="button" class="icon-btn sm primary" id="reaction-capture-confirm-btn" title="确认备注并收录" onclick="confirmReactionCaptureRemark()" style="display:none"><span class="material-symbols-outlined">edit</span></button>
+        <button type="button" class="icon-btn sm primary" id="reaction-capture-start-btn" title="开始截取" onclick="startReactionCapture()"><span class="material-symbols-outlined">play_arrow</span></button>
+      </div>
+    </div>
+  </div>
+
   <div class="modal-overlay" id="user-confirm-modal" onclick="closeUserConfirmModal(event)">
     <div class="modal-panel" role="dialog" aria-labelledby="user-confirm-title" onclick="event.stopPropagation()">
       <div class="modal-head">
@@ -2847,7 +2980,7 @@
         </div>
         <div class="sidebar-brand-text">
           <h1>Chat Bot</h1>
-          <span>NapCat 插件 · v1.5</span>
+          <span>NapCat 插件 · v1.7</span>
         </div>
       </div>
       <nav class="sidebar-nav">
@@ -2994,6 +3127,7 @@
               <option value="bailian">阿里云百炼</option>
               <option value="codingplan">阿里云 Coding Plan</option>
               <option value="openai">魔搭 ModelScope</option>
+              <option value="kimi">Kimi Code</option>
               <option value="custom">自定义 OpenAI 兼容</option>
             </select>
           </div>
@@ -3034,10 +3168,35 @@
             <div class="form-label">API Key</div>
             <input type="password" class="ipt" id="cfg-customApiKey" placeholder="填写对应服务的 Key" autocomplete="off" />
           </div>
+          <div class="form-row" id="row-kimiKey">
+            <div class="form-label">API Key<div class="hint">Kimi Code 编程接口 Key</div></div>
+            <input type="password" class="ipt" id="cfg-kimiApiKey" placeholder="sk-..." autocomplete="off" />
+          </div>
+          <div class="vision-config-grid" id="row-kimiUrls">
+            <div class="form-row" style="border-right:1px solid var(--border)">
+              <div class="form-label">Chat API URL</div>
+              <input type="text" class="ipt" id="cfg-kimiApiUrl" placeholder="https://api.kimi.com/coding/v1/chat/completions" />
+            </div>
+            <div class="form-row">
+              <div class="form-label">Models API URL</div>
+              <input type="text" class="ipt" id="cfg-kimiModelsUrl" placeholder="https://api.kimi.com/coding/v1/models" />
+            </div>
+          </div>
+          <div class="form-row" id="row-kimiUa" style="display:none">
+            <div class="form-label">请求头<div class="hint">Kimi Code 接口校验 Coding Agent 白名单</div></div>
+            <div style="font-size:12px;color:var(--text2);font-family:monospace;padding:8px 0">User-Agent: KimiCLI/1.3</div>
+          </div>
           </div>
 
         <div class="section">
           <div class="section-title">对话模型</div>
+          <div class="form-row" id="row-model-kimi">
+            <div class="form-label">Kimi 模型<div class="hint">从 Models API 拉取或直接编辑下方模型 ID</div></div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;width:100%;max-width:520px">
+              <select class="ipt" id="cfg-kimiChatModel" style="flex:1;min-width:200px" onchange="document.getElementById('cfg-model').value=this.value"></select>
+              <button type="button" class="btn btn-s" onclick="loadKimiChatModels()">刷新列表</button>
+            </div>
+          </div>
           <div class="form-row" id="row-model-siliconflow">
             <div class="form-label">模型列表<div class="hint">SiliconFlow 可快速选择</div></div>
             <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;width:100%;max-width:520px">
@@ -3179,6 +3338,10 @@
                 <button type="button" class="btn btn-s" onclick="loadKimiModels()">刷新列表</button>
           </div>
         </div>
+          <div class="form-row">
+              <div class="form-label">Cookies<div class="hint">可选；Kimi Code 视觉请求附加 Cookie 与 KimiCLI User-Agent</div></div>
+              <textarea class="ipt" id="cfg-kimiVisionCookies" rows="2" placeholder="kimi-auth=...; 其他 cookie 键值对" style="font-family:monospace;font-size:12px"></textarea>
+          </div>
 
           <div class="failover-head" style="border-top:1px solid var(--border)">
             <div class="failover-head-title">
@@ -3652,6 +3815,7 @@
             <div class="form-label">可选表情<div class="hint">在弹窗中点击 🧠 设为思考表情、💬 设为回复表情</div></div>
             <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
               <button type="button" class="icon-btn" title="打开表情库" onclick="openReactionEmojiModal()"><span class="material-symbols-outlined">apps</span></button>
+              <button type="button" class="icon-btn" title="从群聊截取表情" onclick="openReactionCaptureModal()"><span class="material-symbols-outlined">content_cut</span></button>
               <span id="reaction-emoji-summary" style="font-size:12px;color:var(--text3)">思考 — · 回复 —</span>
             </div>
           </div>
@@ -4716,6 +4880,7 @@
       bailian: { desc: '<strong>阿里云百炼</strong> — DashScope OpenAI 兼容接口。', modelHint: '如 qwen3.5-plus、qwen-plus', defaultModel: 'qwen3.5-plus', showModelList: false },
       codingplan: { desc: '<strong>Coding Plan</strong> — 阿里云 OpenClaw 编程计划接口。', modelHint: '如 qwen3.5-plus、qwen3-coder-plus', defaultModel: 'qwen3.5-plus', showModelList: false },
       openai: { desc: '<strong>魔搭 ModelScope</strong> — OpenAI 兼容推理接口，Key 填 AccessToken。', modelHint: '如 Qwen/Qwen2.5-7B-Instruct', defaultModel: 'Qwen/Qwen2.5-7B-Instruct', showModelList: false },
+      kimi: { desc: '<strong>Kimi Code</strong> — Moonshot 编程接口（<code>api.kimi.com/coding</code>）。请求自动附加 <code>User-Agent: KimiCLI/1.3</code>，仅需填写 API Key。', modelHint: 'kimi-for-coding', defaultModel: 'kimi-for-coding', showModelList: false },
       custom: { desc: '<strong>自定义</strong> — 任意 OpenAI 兼容网关，填写完整 chat/completions URL 与 Key。', modelHint: '填写网关支持的模型名', defaultModel: '', showModelList: false }
     };
 
@@ -4741,6 +4906,7 @@
       ['bailian', '阿里云百炼'],
       ['codingplan', 'Coding Plan'],
       ['openai', '魔搭 ModelScope'],
+      ['kimi', 'Kimi Code'],
       ['custom', '自定义 OpenAI 兼容']
     ];
 
@@ -4855,10 +5021,11 @@
         '</div>' +
         '<div class="failover-item-body">' +
           '<div class="failover-field"><div class="failover-field-label">视觉模型</div><input type="text" class="ipt pool-model" value="' + escapeHtml(item.model || 'kimi-for-coding') + '" placeholder="kimi-for-coding" /></div>' +
-          '<div class="failover-field"><div class="failover-field-label">Kimi Code 头</div><label style="display:inline-flex;align-items:center;gap:6px;font-size:12px;margin-top:8px"><input type="checkbox" class="pool-kimi"' + (item.kimiCode !== false ? ' checked' : '') + ' />自动附加 User-Agent</label></div>' +
+          '<div class="failover-field"><div class="failover-field-label">Kimi Code 头</div><label style="display:inline-flex;align-items:center;gap:6px;font-size:12px;margin-top:8px"><input type="checkbox" class="pool-kimi"' + (item.kimiCode !== false ? ' checked' : '') + ' />User-Agent + Cookies</label></div>' +
           '<div class="failover-field full"><div class="failover-field-label">Chat API URL</div><input type="text" class="ipt pool-url" value="' + escapeHtml(item.apiUrl || '') + '" placeholder="https://api.kimi.com/coding/v1/chat/completions" /></div>' +
           '<div class="failover-field full"><div class="failover-field-label">Models API URL</div><input type="text" class="ipt pool-models-url" value="' + escapeHtml(item.modelsUrl || '') + '" placeholder="https://api.kimi.com/coding/v1/models" /></div>' +
           '<div class="failover-field full"><div class="failover-field-label">API Key</div><input type="password" class="ipt pool-key" value="' + escapeHtml(item.apiKey || '') + '" placeholder="sk-..." autocomplete="off" /></div>' +
+          '<div class="failover-field full"><div class="failover-field-label">Cookies <span style="font-weight:400;color:var(--text3)">（可选，留空用主配置）</span></div><textarea class="ipt pool-cookies" rows="2" placeholder="kimi-auth=..." style="font-family:monospace;font-size:12px">' + escapeHtml(item.cookies || '') + '</textarea></div>' +
         '</div>' +
       '</div>';
     }
@@ -4874,7 +5041,8 @@
           provider: el.querySelector('.pool-provider')?.value || 'custom',
           apiUrl: (el.querySelector('.pool-url')?.value || '').trim(),
           apiKey: (el.querySelector('.pool-key')?.value || '').trim(),
-          model: (el.querySelector('.pool-model')?.value || '').trim()
+          model: (el.querySelector('.pool-model')?.value || '').trim(),
+          cookies: (el.querySelector('.pool-cookies')?.value || '').trim()
         };
       });
     }
@@ -4891,7 +5059,8 @@
           modelsUrl: (el.querySelector('.pool-models-url')?.value || '').trim(),
           apiKey: (el.querySelector('.pool-key')?.value || '').trim(),
           model: (el.querySelector('.pool-model')?.value || '').trim() || 'kimi-for-coding',
-          kimiCode: el.querySelector('.pool-kimi')?.checked !== false
+          kimiCode: el.querySelector('.pool-kimi')?.checked !== false,
+          cookies: (el.querySelector('.pool-cookies')?.value || '').trim()
         };
       });
     }
@@ -5001,7 +5170,7 @@
       const prev = sel.value || config.kimiVisionModel || 'kimi-for-coding';
       sel.innerHTML = '<option value="">加载中…</option>';
       try {
-        const res = await fetch(BASE + '/kimi/models');
+        const res = await fetch(BASE + '/kimi/models?scope=vision');
         const data = await res.json();
         const models = (data.models || ['kimi-for-coding']).filter(Boolean);
         sel.innerHTML = models.map(function (m) {
@@ -5012,7 +5181,30 @@
       } catch (e) {
         sel.innerHTML = '<option value="kimi-for-coding">kimi-for-coding</option>';
         sel.value = 'kimi-for-coding';
-        toast('Kimi 模型列表加载失败', 'error');
+        toast('Kimi 视觉模型列表加载失败', 'error');
+      }
+    }
+
+    async function loadKimiChatModels() {
+      const sel = document.getElementById('cfg-kimiChatModel');
+      if (!sel) return;
+      const prev = sel.value || config.model || 'kimi-for-coding';
+      sel.innerHTML = '<option value="">加载中…</option>';
+      try {
+        const res = await fetch(BASE + '/kimi/models?scope=chat');
+        const data = await res.json();
+        const models = (data.models || ['kimi-for-coding']).filter(Boolean);
+        sel.innerHTML = models.map(function (m) {
+          return '<option value="' + escapeHtml(m) + '">' + escapeHtml(m) + '</option>';
+        }).join('');
+        if (models.includes(prev)) sel.value = prev;
+        else if (models.length) sel.value = models[0];
+        const modelInput = document.getElementById('cfg-model');
+        if (modelInput && sel.value) modelInput.value = sel.value;
+      } catch (e) {
+        sel.innerHTML = '<option value="kimi-for-coding">kimi-for-coding</option>';
+        sel.value = 'kimi-for-coding';
+        toast('Kimi 对话模型列表加载失败', 'error');
       }
     }
 
@@ -5311,10 +5503,18 @@
       document.getElementById('row-codingPlanKey').style.display = p === 'codingplan' ? 'flex' : 'none';
       document.getElementById('row-codingPlanUrl').style.display = p === 'codingplan' ? 'flex' : 'none';
       document.getElementById('row-customUrl').style.display = p === 'custom' ? 'flex' : 'none';
+      document.getElementById('row-kimiKey').style.display = p === 'kimi' ? 'flex' : 'none';
+      const kimiUrls = document.getElementById('row-kimiUrls');
+      if (kimiUrls) kimiUrls.style.display = p === 'kimi' ? 'grid' : 'none';
+      const kimiUa = document.getElementById('row-kimiUa');
+      if (kimiUa) kimiUa.style.display = p === 'kimi' ? 'flex' : 'none';
       const customKeyRow = document.getElementById('row-customKey');
       if (customKeyRow) customKeyRow.style.display = p === 'custom' ? 'flex' : 'none';
       const modelListRow = document.getElementById('row-model-siliconflow');
       if (modelListRow) modelListRow.style.display = meta.showModelList ? 'flex' : 'none';
+      const kimiModelRow = document.getElementById('row-model-kimi');
+      if (kimiModelRow) kimiModelRow.style.display = p === 'kimi' ? 'flex' : 'none';
+      if (p === 'kimi') loadKimiChatModels();
     }
 
     function applyConfigToForm() {
@@ -5333,6 +5533,12 @@
       document.getElementById('cfg-customApiUrl').value = config.customApiUrl || '';
       const customKeyEl = document.getElementById('cfg-customApiKey');
       if (customKeyEl) customKeyEl.value = config.customApiKey || '';
+      const kimiKeyChatEl = document.getElementById('cfg-kimiApiKey');
+      if (kimiKeyChatEl) kimiKeyChatEl.value = config.kimiApiKey || '';
+      const kimiUrlChatEl = document.getElementById('cfg-kimiApiUrl');
+      if (kimiUrlChatEl) kimiUrlChatEl.value = config.kimiApiUrl || 'https://api.kimi.com/coding/v1/chat/completions';
+      const kimiModelsUrlChatEl = document.getElementById('cfg-kimiModelsUrl');
+      if (kimiModelsUrlChatEl) kimiModelsUrlChatEl.value = config.kimiModelsUrl || 'https://api.kimi.com/coding/v1/models';
       const chatParseEl = document.getElementById('tgl-chatParseImage');
       if (chatParseEl) chatParseEl.classList.toggle('on', config.chatParseImage !== false);
       const kimiKeyEl = document.getElementById('cfg-kimiVisionApiKey');
@@ -5341,6 +5547,8 @@
       if (kimiUrlEl) kimiUrlEl.value = config.kimiVisionApiUrl || 'https://api.kimi.com/coding/v1/chat/completions';
       const kimiModelsUrlEl = document.getElementById('cfg-kimiVisionModelsUrl');
       if (kimiModelsUrlEl) kimiModelsUrlEl.value = config.kimiVisionModelsUrl || 'https://api.kimi.com/coding/v1/models';
+      const kimiVisionCookiesEl = document.getElementById('cfg-kimiVisionCookies');
+      if (kimiVisionCookiesEl) kimiVisionCookiesEl.value = config.kimiVisionCookies || '';
       syncKimiVisionRow();
       loadKimiModels().then(function () {
         const kimiSel = document.getElementById('cfg-kimiVisionModel');
@@ -5348,6 +5556,13 @@
         if (kimiSel && kimiModel) kimiSel.value = kimiModel;
       });
       document.getElementById('cfg-model').value = config.model || 'deepseek-ai/DeepSeek-V3';
+      if ((config.apiProvider || 'siliconflow') === 'kimi') {
+        loadKimiChatModels().then(function () {
+          const kimiChatSel = document.getElementById('cfg-kimiChatModel');
+          const chatModel = config.model || 'kimi-for-coding';
+          if (kimiChatSel && chatModel) kimiChatSel.value = chatModel;
+        });
+      }
       document.getElementById('cfg-modelFallbackList').value = Array.isArray(config.modelFallbackList) ? config.modelFallbackList.join('\n') : '';
       syncFailoverFormFromConfig();
       filterModelList();
@@ -6427,6 +6642,16 @@
       updateReactionEmojiSummary();
     }
 
+    let reactionCapturePollTimer = null;
+    let reactionEmojiEditId = null;
+
+    function defaultReactionRemark(entry) {
+      if (!entry) return '';
+      const raw = String(entry.name || '').replace(/^\[|\]$/g, '').trim();
+      if (raw && raw !== String(entry.id || '')) return raw;
+      return '';
+    }
+
     function renderReactionEmojiGrid() {
       const grid = document.getElementById('reaction-emoji-grid');
       if (!grid) return;
@@ -6439,22 +6664,104 @@
         const jsId = id.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
         const isThink = id === thinking;
         const isAfter = id === after;
+        const isEditing = reactionEmojiEditId === id;
         let roleCls = '';
         if (isThink && isAfter) roleCls = ' role-both';
         else if (isThink) roleCls = ' role-thinking';
         else if (isAfter) roleCls = ' role-after';
+        if (isEditing) roleCls += ' editing';
         const delay = Math.min(i * 16, 240);
         const thinkBtnCls = isThink ? ' thinking-on' : '';
         const afterBtnCls = isAfter ? ' after-on' : '';
+        const nameBlock = isEditing
+          ? '<input type="text" class="ipt reaction-emoji-edit-input" id="reaction-edit-' + safeId + '" value="' + escapeHtml(e.name || '') + '" placeholder="备注" onkeydown="onReactionEmojiEditKeydown(event,\'' + jsId + '\')" />'
+          : '<div class="rid" title="' + safeId + '">' + escapeHtml(e.name || id) + '</div>';
+        const editBtn = isEditing
+          ? '<button type="button" class="icon-btn sm thinking-on" title="保存备注" onclick="saveReactionEmojiRemark(\'' + jsId + '\')"><span class="material-symbols-outlined">edit</span></button>' +
+            '<button type="button" class="icon-btn sm" title="取消编辑" onclick="cancelReactionEmojiEdit()"><span class="material-symbols-outlined">close</span></button>'
+          : '<button type="button" class="icon-btn sm" title="编辑备注" onclick="beginReactionEmojiEdit(\'' + jsId + '\')"><span class="material-symbols-outlined">edit</span></button>' +
+            '<button type="button" class="icon-btn sm delete-btn" title="删除" onclick="deleteReactionEmoji(\'' + jsId + '\')"><span class="material-symbols-outlined">delete</span></button>';
         return '<div class="reaction-emoji-card' + roleCls + '" data-id="' + safeId + '" style="animation-delay:' + delay + 'ms">' +
           '<div class="glyph">' + escapeHtml(e.glyph || e.name || id) + '</div>' +
-          '<div class="rid" title="' + safeId + '">' + escapeHtml(e.name || id) + '</div>' +
+          nameBlock +
           '<div class="reaction-emoji-actions">' +
           '<button type="button" class="icon-btn sm' + thinkBtnCls + '" title="设为思考表情" onclick="pickReactionEmoji(\'thinking\',\'' + jsId + '\')"><span class="material-symbols-outlined">psychology</span></button>' +
           '<button type="button" class="icon-btn sm' + afterBtnCls + '" title="设为回复后表情" onclick="pickReactionEmoji(\'after\',\'' + jsId + '\')"><span class="material-symbols-outlined">chat</span></button>' +
+          editBtn +
           '</div></div>';
       }).join('');
+      if (reactionEmojiEditId) {
+        setTimeout(function () {
+          const inp = document.getElementById('reaction-edit-' + CSS.escape(reactionEmojiEditId));
+          if (inp) { inp.focus(); inp.select(); }
+        }, 30);
+      }
       updateReactionEmojiSummary();
+    }
+
+    function beginReactionEmojiEdit(id) {
+      reactionEmojiEditId = id;
+      renderReactionEmojiGrid();
+    }
+
+    function cancelReactionEmojiEdit() {
+      reactionEmojiEditId = null;
+      renderReactionEmojiGrid();
+    }
+
+    function onReactionEmojiEditKeydown(ev, id) {
+      if (ev.key === 'Enter') {
+        ev.preventDefault();
+        saveReactionEmojiRemark(id);
+      } else if (ev.key === 'Escape') {
+        ev.preventDefault();
+        cancelReactionEmojiEdit();
+      }
+    }
+
+    async function saveReactionEmojiRemark(id) {
+      const inp = document.getElementById('reaction-edit-' + CSS.escape(id));
+      const name = (inp?.value || '').trim();
+      if (!name) { toast('备注不能为空', 'error'); return; }
+      try {
+        const res = await fetch(BASE + '/reactions/catalog/update', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id, name })
+        });
+        const data = await res.json();
+        if (!data.success) { toast(data.error || '保存失败', 'error'); return; }
+        reactionEmojiEditId = null;
+        await refreshReactionCatalogFromServer(data.catalog);
+        toast('备注已更新', 'success');
+      } catch (_) {
+        toast('保存失败', 'error');
+      }
+    }
+
+    async function deleteReactionEmoji(id) {
+      if (!confirm('确定从表情库删除此表情？')) return;
+      try {
+        const res = await fetch(BASE + '/reactions/catalog/delete', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id })
+        });
+        const data = await res.json();
+        if (!data.success) { toast(data.error || '删除失败', 'error'); return; }
+        if (document.getElementById('cfg-thinkingEmojiId')?.value === id) {
+          document.getElementById('cfg-thinkingEmojiId').value = '';
+        }
+        if (document.getElementById('cfg-afterReplyEmojiId')?.value === id) {
+          document.getElementById('cfg-afterReplyEmojiId').value = '';
+        }
+        if (reactionEmojiEditId === id) reactionEmojiEditId = null;
+        await refreshReactionCatalogFromServer(data.catalog);
+        updateReactionEmojiSummary();
+        toast('已从表情库删除', 'success');
+      } catch (_) {
+        toast('删除失败', 'error');
+      }
     }
 
     function toggleReactionJsonPanel() {
@@ -6481,6 +6788,226 @@
       if (card) {
         card.classList.add('pulse');
         setTimeout(() => card.classList.remove('pulse'), 560);
+      }
+    }
+
+    let reactionCapturePollTimer = null;
+
+    function stopReactionCapturePoll() {
+      if (reactionCapturePollTimer) {
+        clearInterval(reactionCapturePollTimer);
+        reactionCapturePollTimer = null;
+      }
+    }
+
+    function renderReactionCaptureStatus(session) {
+      const box = document.getElementById('reaction-capture-status');
+      const startBtn = document.getElementById('reaction-capture-start-btn');
+      const cancelBtn = document.getElementById('reaction-capture-cancel-btn');
+      const confirmBtn = document.getElementById('reaction-capture-confirm-btn');
+      if (!box) return;
+      if (!session) {
+        box.style.display = 'none';
+        box.className = 'reaction-capture-status';
+        box.innerHTML = '';
+        if (startBtn) startBtn.style.display = '';
+        if (cancelBtn) cancelBtn.style.display = 'none';
+        if (confirmBtn) confirmBtn.style.display = 'none';
+        return;
+      }
+      box.style.display = 'block';
+      let cls = 'reaction-capture-status';
+      let html = '';
+      if (session.status === 'countdown') {
+        cls += ' active';
+        html = '<div class="reaction-capture-hint">准备中，即将在群里 @ 用户…</div>' +
+          '<div class="reaction-capture-countdown">' + (session.countdownRemaining || 0) + 's</div>' +
+          '<p class="reaction-capture-hint">群 ' + escapeHtml(session.groupId) + ' · QQ ' + escapeHtml(session.targetUserId) + '</p>';
+        if (startBtn) startBtn.style.display = 'none';
+        if (cancelBtn) cancelBtn.style.display = '';
+        if (confirmBtn) confirmBtn.style.display = 'none';
+      } else if (session.status === 'waiting') {
+        cls += ' active';
+        html = '<div class="reaction-capture-hint">等待用户在群里发送 QQ 表情…</div>' +
+          '<div class="reaction-capture-countdown">' + (session.captureRemaining || 0) + 's</div>' +
+          '<p class="reaction-capture-hint">请在群 ' + escapeHtml(session.groupId) + ' 中 @' + escapeHtml(session.targetUserId) + ' 后发送单个表情</p>';
+        if (startBtn) startBtn.style.display = 'none';
+        if (cancelBtn) cancelBtn.style.display = '';
+        if (confirmBtn) confirmBtn.style.display = 'none';
+      } else if (session.status === 'pending_remark') {
+        cls += ' active';
+        const e = session.pendingEntry || session.result || {};
+        const defaultName = defaultReactionRemark(e);
+        html = '<strong>截取成功，请填写备注</strong>' +
+          '<p class="reaction-capture-hint">表情 ID: ' + escapeHtml(String(e.id || '')) +
+          (e.glyph ? ' · 符号: ' + escapeHtml(String(e.glyph)) : '') + '</p>' +
+          '<div class="reaction-capture-remark-row">' +
+          '<input type="text" class="ipt" id="reaction-capture-remark" placeholder="输入备注，如：庆祝" value="' + escapeHtml(defaultName) + '" onkeydown="if(event.key===\'Enter\')confirmReactionCaptureRemark()" />' +
+          '</div>';
+        if (startBtn) startBtn.style.display = 'none';
+        if (cancelBtn) cancelBtn.style.display = '';
+        if (confirmBtn) confirmBtn.style.display = '';
+        stopReactionCapturePoll();
+        setTimeout(function () {
+          const inp = document.getElementById('reaction-capture-remark');
+          if (inp) { inp.focus(); inp.select(); }
+        }, 40);
+      } else if (session.status === 'captured') {
+        cls += ' success';
+        const e = session.result || {};
+        html = '<strong>已收录</strong><br>「' + escapeHtml(e.name || e.id) + '」(ID: ' + escapeHtml(String(e.id || '')) + ')';
+        if (startBtn) startBtn.style.display = '';
+        if (cancelBtn) cancelBtn.style.display = 'none';
+        if (confirmBtn) confirmBtn.style.display = 'none';
+        stopReactionCapturePoll();
+      } else if (session.status === 'duplicate') {
+        cls += ' error';
+        const e = session.result || {};
+        html = '<strong>表情已存在</strong><br>「' + escapeHtml(e.name || e.id) + '」(ID: ' + escapeHtml(String(e.id || '')) + ') 已在库中';
+        if (startBtn) startBtn.style.display = '';
+        if (cancelBtn) cancelBtn.style.display = 'none';
+        if (confirmBtn) confirmBtn.style.display = 'none';
+        stopReactionCapturePoll();
+      } else if (session.status === 'timeout' || session.status === 'error') {
+        cls += ' error';
+        html = '<strong>' + (session.status === 'timeout' ? '超时' : '失败') + '</strong><br>' + escapeHtml(session.error || '未收到表情');
+        if (startBtn) startBtn.style.display = '';
+        if (cancelBtn) cancelBtn.style.display = 'none';
+        if (confirmBtn) confirmBtn.style.display = 'none';
+        stopReactionCapturePoll();
+      } else if (session.status === 'cancelled') {
+        cls += ' error';
+        html = '<strong>已取消</strong>';
+        if (startBtn) startBtn.style.display = '';
+        if (cancelBtn) cancelBtn.style.display = 'none';
+        if (confirmBtn) confirmBtn.style.display = 'none';
+        stopReactionCapturePoll();
+      }
+      box.className = cls;
+      box.innerHTML = html;
+    }
+
+    async function refreshReactionCatalogFromServer(catalog) {
+      const list = Array.isArray(catalog) ? catalog : [];
+      config.reactionEmojiCatalog = list;
+      const catEl = document.getElementById('cfg-reactionEmojiCatalog');
+      if (catEl) catEl.value = JSON.stringify(list, null, 2);
+      updateReactionEmojiSummary();
+      const modal = document.getElementById('reaction-emoji-modal');
+      if (modal && modal.classList.contains('open')) renderReactionEmojiGrid();
+    }
+
+    async function pollReactionCaptureStatus() {
+      try {
+        const res = await fetch(BASE + '/reactions/capture/status');
+        const data = await res.json();
+        if (!data.success) return;
+        renderReactionCaptureStatus(data.session);
+        if (data.catalog) await refreshReactionCatalogFromServer(data.catalog);
+        const st = data.session?.status;
+        if (st && !['countdown', 'waiting'].includes(st)) stopReactionCapturePoll();
+      } catch (_) { /* ignore */ }
+    }
+
+    async function confirmReactionCaptureRemark() {
+      const inp = document.getElementById('reaction-capture-remark');
+      const name = (inp?.value || '').trim();
+      if (!name) { toast('请填写备注', 'error'); inp?.focus(); return; }
+      try {
+        const res = await fetch(BASE + '/reactions/capture/confirm', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name })
+        });
+        const data = await res.json();
+        if (!data.success) { toast(data.error || '收录失败', 'error'); return; }
+        renderReactionCaptureStatus(data.session);
+        if (data.catalog) await refreshReactionCatalogFromServer(data.catalog);
+        toast('表情已收录到库', 'success');
+      } catch (_) {
+        toast('收录失败', 'error');
+      }
+    }
+
+    async function loadReactionCaptureGroups() {
+      const sel = document.getElementById('reaction-capture-group');
+      if (!sel) return;
+      sel.innerHTML = '<option value="">加载中…</option>';
+      try {
+        const res = await fetch(BASE + '/groups');
+        const data = await res.json();
+        const list = data.data || [];
+        if (!list.length) {
+          sel.innerHTML = '<option value="">暂无群，请先在 NapCat 登录</option>';
+          return;
+        }
+        sel.innerHTML = list.map((g) => {
+          const gid = String(g.group_id || g.groupId || '');
+          const name = (g.group_name || g.name || gid).slice(0, 40);
+          return '<option value="' + escapeHtml(gid) + '">' + escapeHtml(name) + ' (' + escapeHtml(gid) + ')</option>';
+        }).join('');
+      } catch (e) {
+        sel.innerHTML = '<option value="">加载群列表失败</option>';
+      }
+    }
+
+    async function openReactionCaptureModal() {
+      stopReactionCapturePoll();
+      renderReactionCaptureStatus(null);
+      await loadReactionCaptureGroups();
+      try {
+        const res = await fetch(BASE + '/reactions/capture/status');
+        const data = await res.json();
+        if (data.session && ['countdown', 'waiting', 'pending_remark'].includes(data.session.status)) {
+          renderReactionCaptureStatus(data.session);
+          if (['countdown', 'waiting'].includes(data.session.status)) {
+            reactionCapturePollTimer = setInterval(pollReactionCaptureStatus, 1000);
+          }
+        }
+      } catch (_) { /* ignore */ }
+      const modal = document.getElementById('reaction-capture-modal');
+      if (modal) modal.classList.add('open');
+    }
+
+    function closeReactionCaptureModal(ev) {
+      if (ev && ev.target !== ev.currentTarget) return;
+      const modal = document.getElementById('reaction-capture-modal');
+      if (modal) modal.classList.remove('open');
+    }
+
+    async function startReactionCapture() {
+      const groupId = document.getElementById('reaction-capture-group')?.value?.trim();
+      const userId = document.getElementById('reaction-capture-user')?.value?.trim();
+      if (!groupId) { toast('请选择群', 'error'); return; }
+      if (!userId || !/^\d+$/.test(userId)) { toast('请填写有效的用户 QQ', 'error'); return; }
+      stopReactionCapturePoll();
+      try {
+        const res = await fetch(BASE + '/reactions/capture/start', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ groupId, userId })
+        });
+        const data = await res.json();
+        if (!data.success) {
+          toast(data.error || '启动失败', 'error');
+          return;
+        }
+        renderReactionCaptureStatus(data.session);
+        reactionCapturePollTimer = setInterval(pollReactionCaptureStatus, 1000);
+        toast('截取已开始，请留意群内 @ 提示', 'success');
+      } catch (e) {
+        toast('启动失败', 'error');
+      }
+    }
+
+    async function cancelReactionCapture() {
+      stopReactionCapturePoll();
+      try {
+        const res = await fetch(BASE + '/reactions/capture/cancel', { method: 'POST' });
+        const data = await res.json();
+        renderReactionCaptureStatus(data.session);
+      } catch (_) {
+        renderReactionCaptureStatus({ status: 'cancelled' });
       }
     }
 
@@ -6569,10 +7096,30 @@
       }
     }
 
+    function avatarUrlForUser(p) {
+      const uid = String((p && p.userId) || '');
+      if (p && p.avatar) return p.avatar;
+      if (/^\d{5,12}$/.test(uid)) return 'https://q1.qlogo.cn/g?b=qq&nk=' + uid + '&s=100';
+      return '';
+    }
+
+    function avatarImgHtml(avatarUrl, nickname) {
+      const nick = escapeHtml((nickname || '?').slice(0, 1));
+      if (avatarUrl) {
+        return '<img src="' + escapeHtml(avatarUrl) + '" alt="" referrerpolicy="no-referrer" loading="lazy" onerror="this.onerror=null;this.classList.add(\'avatar-broken\');this.style.display=\'none\';var s=this.nextElementSibling;if(s)s.style.display=\'flex\'">' +
+          '<span class="avatar-ph" style="display:none">' + nick + '</span>';
+      }
+      return '<span class="avatar-ph">' + nick + '</span>';
+    }
+
     function mergeUserProfilesFromConfig() {
       const c = config.userProfileCache || {};
       for (const [id, p] of Object.entries(c)) {
-        userProfileLocal[id] = { userId: id, nickname: p.nickname || '', avatar: p.avatar || '' };
+        userProfileLocal[id] = {
+          userId: id,
+          nickname: p.nickname || '',
+          avatar: p.avatar || avatarUrlForUser({ userId: id })
+        };
       }
     }
 
@@ -6580,21 +7127,41 @@
       const id = String(uid);
       const local = userProfileLocal[id];
       const cached = config.userProfileCache && config.userProfileCache[id];
-      return {
+      const profile = {
         userId: id,
         nickname: (local && local.nickname) || (cached && cached.nickname) || '',
         avatar: (local && local.avatar) || (cached && cached.avatar) || ''
+      };
+      if (!profile.avatar) profile.avatar = avatarUrlForUser(profile);
+      return profile;
+    }
+
+    function enrichUserResult(u) {
+      if (!u) return u;
+      const profile = normalizeUserProfileShape(u);
+      if (!profile.avatar) profile.avatar = avatarUrlForUser(profile);
+      return profile;
+    }
+
+    function normalizeUserProfileShape(u) {
+      return {
+        userId: String(u.userId || u.user_id || ''),
+        nickname: u.nickname || u.userName || u.nick || '',
+        avatar: u.avatar || '',
+        fromConversation: u.fromConversation,
+        groupName: u.groupName
       };
     }
 
     function cacheUserProfile(p) {
       if (!p || !p.userId) return;
       const id = String(p.userId);
-      userProfileLocal[id] = { userId: id, nickname: p.nickname || '', avatar: p.avatar || '' };
+      const avatar = p.avatar || avatarUrlForUser(p);
+      userProfileLocal[id] = { userId: id, nickname: p.nickname || '', avatar };
       if (!config.userProfileCache) config.userProfileCache = {};
       config.userProfileCache[id] = {
         nickname: p.nickname || '',
-        avatar: p.avatar || '',
+        avatar,
         updatedAt: Date.now()
       };
     }
@@ -6603,14 +7170,18 @@
       const p = getUserProfile(uid);
       const nick = escapeHtml(p.nickname || '未知昵称');
       const uidEsc = escapeHtml(uid);
-      const av = p.avatar
-        ? '<img src="' + escapeHtml(p.avatar) + '" alt="" onerror="this.outerHTML=\'<span class=avatar-ph>' + (p.nickname || '?').slice(0, 1) + '</span>\'">'
-        : '<span class="avatar-ph">' + escapeHtml((p.nickname || '?').slice(0, 1)) + '</span>';
+      const av = avatarImgHtml(p.avatar, p.nickname);
       return '<span class="user-profile-card">' + av + '<span class="meta"><div class="nick" title="' + nick + '">' + nick + '</div><div class="uid">' + uidEsc + '</div></span><span class="remove" onclick="removeUser(\'' + which + '\',\'' + uid + '\')">×</span></span>';
     }
 
     async function fetchUserProfiles(ids) {
-      const missing = (ids || []).map(String).filter((id) => id && !getUserProfile(id).nickname);
+      const missing = (ids || []).map(String).filter((id) => {
+        if (!id) return false;
+        const local = userProfileLocal[id];
+        const cached = config.userProfileCache && config.userProfileCache[id];
+        const nickname = (local && local.nickname) || (cached && cached.nickname) || '';
+        return !nickname;
+      });
       if (!missing.length) return;
       try {
         const res = await fetch(BASE + '/users/profiles', {
@@ -6636,9 +7207,18 @@
       if (elB) elB.innerHTML = b.length ? b.map((uid) => userCardHtml(uid, 'blacklist')).join('') : '<p>暂无黑名单用户</p>';
     }
 
+    function syncResolveDropdownState(dd, open) {
+      if (!dd) return;
+      const box = dd.closest('.resolve-box');
+      const section = box?.closest('.section');
+      if (box) box.classList.toggle('is-open', !!open);
+      if (section) section.classList.toggle('has-open-dropdown', !!open);
+    }
+
     function hideUserDropdown(which) {
       const dd = document.getElementById('user-' + which + '-dropdown');
       if (dd) dd.style.display = 'none';
+      syncResolveDropdownState(dd, false);
       if (userResolveState[which]) userResolveState[which].idx = -1;
     }
 
@@ -6648,17 +7228,18 @@
       if (!dd || !st) return;
       if (!st.results.length) {
         dd.style.display = 'none';
+        syncResolveDropdownState(dd, false);
         return;
       }
       dd.innerHTML = st.results.map((u, i) => {
-        const nick = escapeHtml(u.nickname || '未知');
-        const sub = u.fromConversation && u.groupName ? escapeHtml('来自会话 · ' + u.groupName) : escapeHtml(u.userId);
-        const av = u.avatar
-          ? '<img src="' + escapeHtml(u.avatar) + '" alt="">'
-          : '<span class="avatar-ph">' + escapeHtml((u.nickname || '?').slice(0, 1)) + '</span>';
-        return '<div class="resolve-item' + (i === st.idx ? ' active' : '') + '" onclick="pickUserResolve(\'' + which + '\',' + i + ')">' + av + '<div><div style="font-weight:600">' + nick + '</div><div style="font-size:11px;color:var(--text3)">' + sub + '</div></div></div>';
+        const item = enrichUserResult(u);
+        const nick = escapeHtml(item.nickname || '未知');
+        const sub = item.fromConversation && item.groupName ? escapeHtml('来自会话 · ' + item.groupName) : escapeHtml(item.userId);
+        const av = avatarImgHtml(item.avatar, item.nickname);
+        return '<div class="resolve-item' + (i === st.idx ? ' active' : '') + '" onclick="pickUserResolve(\'' + which + '\',' + i + ')">' + av + '<div><div>' + nick + '</div><div>' + sub + '</div></div></div>';
       }).join('');
       dd.style.display = 'block';
+      syncResolveDropdownState(dd, true);
     }
 
     function onUserResolveInput(which) {
@@ -6671,7 +7252,7 @@
         try {
           const res = await fetch(BASE + '/users/resolve?q=' + encodeURIComponent(q));
           const data = await res.json();
-          userResolveState[which].results = data.data || [];
+          userResolveState[which].results = (data.data || []).map(enrichUserResult);
           userResolveState[which].idx = userResolveState[which].results.length ? 0 : -1;
           renderUserDropdown(which);
         } catch {
@@ -6733,9 +7314,9 @@
         }
         const name = escapeHtml(profile.nickname || '未知用户');
         const uid = escapeHtml(String(profile.userId || ''));
-        const avatar = profile.avatar ? escapeHtml(profile.avatar) : '';
-        head.innerHTML = (avatar
-          ? '<img src="' + avatar + '" alt="">'
+        const avUrl = profile.avatar || avatarUrlForUser(profile);
+        head.innerHTML = (avUrl
+          ? '<img src="' + escapeHtml(avUrl) + '" alt="" referrerpolicy="no-referrer">'
           : '<span class="avatar-ph" style="width:42px;height:42px;font-size:14px">' + escapeHtml((profile.nickname || '?').slice(0, 1)) + '</span>') +
           '<div class="confirm-user-meta"><div style="font-weight:600;color:var(--text)">' + name + '</div><div>QQ：' + uid + '</div></div>';
         text.innerHTML = '<div style="font-weight:600;color:var(--text);margin-bottom:6px">' + escapeHtml(title || '确认操作') + '</div>' +
@@ -6820,6 +7401,7 @@
     function hideAdminUserDropdown() {
       const dd = document.getElementById('admin-user-dropdown');
       if (dd) dd.style.display = 'none';
+      syncResolveDropdownState(dd, false);
       userResolveState.admin.idx = -1;
     }
 
@@ -6827,16 +7409,20 @@
       const st = userResolveState.admin;
       const dd = document.getElementById('admin-user-dropdown');
       if (!dd) return;
-      if (!st.results.length) { dd.style.display = 'none'; return; }
+      if (!st.results.length) {
+        dd.style.display = 'none';
+        syncResolveDropdownState(dd, false);
+        return;
+      }
       dd.innerHTML = st.results.map((u, i) => {
-        const nick = escapeHtml(u.nickname || '未知');
-        const sub = escapeHtml(u.userId);
-        const av = u.avatar
-          ? '<img src="' + escapeHtml(u.avatar) + '" alt="">'
-          : '<span class="avatar-ph">' + escapeHtml((u.nickname || '?').slice(0, 1)) + '</span>';
-        return '<div class="resolve-item' + (i === st.idx ? ' active' : '') + '" onclick="pickAdminUserResolve(' + i + ')">' + av + '<div><div style="font-weight:600">' + nick + '</div><div style="font-size:11px;color:var(--text3)">' + sub + '</div></div></div>';
+        const item = enrichUserResult(u);
+        const nick = escapeHtml(item.nickname || '未知');
+        const sub = escapeHtml(item.userId);
+        const av = avatarImgHtml(item.avatar, item.nickname);
+        return '<div class="resolve-item' + (i === st.idx ? ' active' : '') + '" onclick="pickAdminUserResolve(' + i + ')">' + av + '<div><div>' + nick + '</div><div>' + sub + '</div></div></div>';
       }).join('');
       dd.style.display = 'block';
+      syncResolveDropdownState(dd, true);
     }
 
     function onAdminUserResolveInput() {
@@ -6849,7 +7435,7 @@
         try {
           const res = await fetch(BASE + '/users/resolve?q=' + encodeURIComponent(q));
           const data = await res.json();
-          userResolveState.admin.results = data.data || [];
+          userResolveState.admin.results = (data.data || []).map(enrichUserResult);
           userResolveState.admin.idx = userResolveState.admin.results.length ? 0 : -1;
           renderAdminUserDropdown();
         } catch {
@@ -7073,6 +7659,15 @@
       if (document.getElementById('cfg-customApiKey')) {
         cfg.customApiKey = document.getElementById('cfg-customApiKey').value;
       }
+      if (document.getElementById('cfg-kimiApiKey')) {
+        cfg.kimiApiKey = document.getElementById('cfg-kimiApiKey').value.trim();
+      }
+      if (document.getElementById('cfg-kimiApiUrl')) {
+        cfg.kimiApiUrl = document.getElementById('cfg-kimiApiUrl').value.trim() || 'https://api.kimi.com/coding/v1/chat/completions';
+      }
+      if (document.getElementById('cfg-kimiModelsUrl')) {
+        cfg.kimiModelsUrl = document.getElementById('cfg-kimiModelsUrl').value.trim() || 'https://api.kimi.com/coding/v1/models';
+      }
       if (document.getElementById('tgl-chatParseImage')) {
         cfg.chatParseImage = document.getElementById('tgl-chatParseImage').classList.contains('on');
       }
@@ -7087,6 +7682,9 @@
       }
       if (document.getElementById('cfg-kimiVisionModel')) {
         cfg.kimiVisionModel = document.getElementById('cfg-kimiVisionModel').value.trim() || 'kimi-for-coding';
+      }
+      if (document.getElementById('cfg-kimiVisionCookies')) {
+        cfg.kimiVisionCookies = document.getElementById('cfg-kimiVisionCookies').value.trim();
       }
       cfg.model = document.getElementById('cfg-model').value.trim();
       const fallbackText = (document.getElementById('cfg-modelFallbackList') && document.getElementById('cfg-modelFallbackList').value) || '';
@@ -7264,6 +7862,7 @@
     function hidePermUserDropdown() {
       const dd = document.getElementById('perm-user-dropdown');
       if (dd) dd.style.display = 'none';
+      syncResolveDropdownState(dd, false);
       userResolveState.perm.idx = -1;
     }
 
@@ -7271,16 +7870,20 @@
       const st = userResolveState.perm;
       const dd = document.getElementById('perm-user-dropdown');
       if (!dd) return;
-      if (!st.results.length) { dd.style.display = 'none'; return; }
+      if (!st.results.length) {
+        dd.style.display = 'none';
+        syncResolveDropdownState(dd, false);
+        return;
+      }
       dd.innerHTML = st.results.map((u, i) => {
-        const nick = escapeHtml(u.nickname || '未知');
-        const sub = escapeHtml(u.userId);
-        const av = u.avatar
-          ? '<img src="' + escapeHtml(u.avatar) + '" alt="">'
-          : '<span class="avatar-ph">' + escapeHtml((u.nickname || '?').slice(0, 1)) + '</span>';
-        return '<div class="resolve-item' + (i === st.idx ? ' active' : '') + '" onclick="pickPermUserResolve(' + i + ')">' + av + '<div><div style="font-weight:600">' + nick + '</div><div style="font-size:11px;color:var(--text3)">' + sub + '</div></div></div>';
+        const item = enrichUserResult(u);
+        const nick = escapeHtml(item.nickname || '未知');
+        const sub = escapeHtml(item.userId);
+        const av = avatarImgHtml(item.avatar, item.nickname);
+        return '<div class="resolve-item' + (i === st.idx ? ' active' : '') + '" onclick="pickPermUserResolve(' + i + ')">' + av + '<div><div>' + nick + '</div><div>' + sub + '</div></div></div>';
       }).join('');
       dd.style.display = 'block';
+      syncResolveDropdownState(dd, true);
     }
 
     function onPermUserResolveInput() {
@@ -7293,7 +7896,7 @@
         try {
           const res = await fetch(BASE + '/users/resolve?q=' + encodeURIComponent(q));
           const data = await res.json();
-          userResolveState.perm.results = data.data || [];
+          userResolveState.perm.results = (data.data || []).map(enrichUserResult);
           userResolveState.perm.idx = userResolveState.perm.results.length ? 0 : -1;
           renderPermUserDropdown();
         } catch {
@@ -7406,10 +8009,8 @@
           const allowed = permAllowed[f.key].has(uid);
           const attrUid = uid.replace(/"/g, '&quot;');
           const nick = escapeHtml(p.nickname || '未知昵称');
-          const av = p.avatar
-            ? '<img src="' + escapeHtml(p.avatar) + '" alt="" style="width:24px;height:24px;border-radius:50%;margin-right:6px;vertical-align:middle">'
-            : '<span style="display:inline-flex;width:24px;height:24px;border-radius:50%;background:var(--bg);align-items:center;justify-content:center;font-size:11px;margin-right:6px;vertical-align:middle">' + escapeHtml((p.nickname || '?').slice(0, 1)) + '</span>';
-          return '<div class="perm-user-card ' + (allowed ? 'allowed' : '') + '" data-userid="' + attrUid + '" data-feature="' + f.key + '" title="' + nick + ' (' + uid + ')">' + av + '<span class="uid" style="display:inline-flex;flex-direction:column;line-height:1.2;text-align:left"><span style="font-weight:600;font-size:12px">' + nick + '</span><span style="font-size:10px;opacity:.75">' + escapeHtml(uid) + '</span></span></div>';
+          const av = avatarImgHtml(p.avatar, p.nickname);
+          return '<div class="perm-user-card ' + (allowed ? 'allowed' : '') + '" data-userid="' + attrUid + '" data-feature="' + f.key + '" title="' + nick + ' (' + uid + ')">' + av + '<span class="uid" style="display:inline-flex;flex-direction:column;line-height:1.2;text-align:left;min-width:0;overflow:hidden"><span style="font-weight:600;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + nick + '</span><span style="font-size:10px;opacity:.75;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + escapeHtml(uid) + '</span></span></div>';
         }).join('');
       }
     }
