@@ -184,6 +184,8 @@ const DEFAULT_CONFIG = {
   privateEnabled: true,
   theme: 'dark',
   logLevel: 'info',
+  logsRefreshIntervalSec: 2,
+  logsScrollMode: 'down',
   webSearchEnabled: false,
   webSearchProvider: 'duckduckgo',
   smartSearchQueryMode: 'ai',
@@ -1565,12 +1567,30 @@ async function aliyunUnifiedSearch(query, accessKeyId, accessKeySecret, options 
   }
 }
 
-/** 使用 AI 根据用户输入和上下文生成一条搜索关键词（用于智能搜索） */
+function shouldSkipWebSearchByHeuristic(text) {
+  const t = String(text || '').trim().replace(/@[^\s\u2005]+/g, '').trim();
+  if (!t || t.length <= 1) return true;
+  if (/^(你好呀?|您好|在吗|在不在|嗨+|hi+|hello+|早上好|早安|午安|晚安|拜拜|再见|谢谢+|感谢+|多谢|好的|好哒|好哦|ok+|okay|嗯+|哦+|啊+)[\s!！。~～?？…]*$/i.test(t)) return true;
+  if (/^(哈{2,}|6{3,}|233+)[\s!！。~～?？…]*$/i.test(t)) return true;
+  if (/^(你是谁|你叫什么|你能做什么|怎么用)$/i.test(t)) return true;
+  return false;
+}
+
+function buildSearchFallbackQuery(userText) {
+  return String(userText || '').trim().replace(/@[^\s\u2005]+/g, '').replace(/\s+/g, ' ').slice(0, 120);
+}
+
+function parseAiSearchOutput(raw) {
+  const text = String(raw || '').trim().replace(/^["']|["']$/g, '');
+  if (!text || /^skip$/i.test(text)) return { skip: true, query: null };
+  return { skip: false, query: text.slice(0, 200) };
+}
+
+/** 使用 AI 判断是否需要搜索，并生成一条搜索关键词 */
 async function aiGenerateSearchQuery(userMessage, historySummary) {
-  const cfg = pluginState.config;
   const { apiUrl, apiKey, model } = getApiConfig();
-  if (!apiKey) return null;
-  const systemPrompt = '你是一个搜索关键词提取助手。根据用户当前的问题和简要上下文，输出一条简短的中文或英文搜索关键词（不超过 15 个词），用于联网搜索以辅助回答。不要解释，只输出关键词本身，不要引号。若无法提炼出有效搜索需求，输出空。';
+  if (!apiKey) return { skip: false, query: null };
+  const systemPrompt = '你是搜索意图助手。根据用户问题判断是否需要联网搜索外部资料。\n\n只输出一行，不要解释：\n- 寒暄、感谢、纯闲聊、主观题、明显无需查资料 → 输出 SKIP\n- 需要查新闻、游戏角色/攻略/设定、百科事实、专业名词、人物事件、产品版本、实时信息等 → 输出一条简短中文或英文搜索关键词（不超过15个词，不要引号）';
   const context = historySummary ? `近期对话摘要：${historySummary.slice(0, 200)}。` : '';
   const userPrompt = `${context}用户当前问题：${String(userMessage).slice(0, 300)}`;
   try {
@@ -1584,26 +1604,24 @@ async function aiGenerateSearchQuery(userMessage, historySummary) {
           { role: 'user', content: userPrompt }
         ],
         stream: false,
-        temperature: 0.3,
+        temperature: 0.2,
         max_tokens: 80
       })
     });
-    if (!res.ok) return null;
+    if (!res.ok) return { skip: false, query: null };
     const data = await res.json();
-    const q = (data?.choices?.[0]?.message?.content || '').trim().replace(/^["']|["']$/g, '').slice(0, 200);
-    return q || null;
+    return parseAiSearchOutput(data?.choices?.[0]?.message?.content || '');
   } catch (e) {
     log('warn', 'AI 生成搜索词失败', e.message);
-    return null;
+    return { skip: false, query: null };
   }
 }
 
 /** 使用 AI 生成最多 3 条搜索关键词（用于三路联合搜索） */
 async function aiGenerateSearchQueries(userMessage, historySummary) {
-  const cfg = pluginState.config;
   const { apiUrl, apiKey, model } = getApiConfig();
-  if (!apiKey) return [];
-  const systemPrompt = '你是一个搜索关键词提取助手。根据用户当前的问题和简要上下文，输出 1～3 条简短的中文或英文搜索关键词（每条不超过 15 个词），用于联网搜索以多角度辅助回答。每行一条关键词，不要编号、不要引号、不要解释。若无法提炼出有效搜索需求，输出空。';
+  if (!apiKey) return { skip: false, queries: [] };
+  const systemPrompt = '你是搜索意图助手。根据用户问题判断是否需要联网搜索。\n\n若属于寒暄、感谢、纯闲聊、无需查资料，只输出一行：SKIP\n\n否则输出 1～3 条简短搜索关键词（每条不超过15个词），每行一条，不要编号、不要引号、不要解释。游戏、百科、新闻、实时信息类问题应输出关键词。';
   const context = historySummary ? `近期对话摘要：${historySummary.slice(0, 200)}。` : '';
   const userPrompt = `${context}用户当前问题：${String(userMessage).slice(0, 300)}`;
   try {
@@ -1617,20 +1635,21 @@ async function aiGenerateSearchQueries(userMessage, historySummary) {
           { role: 'user', content: userPrompt }
         ],
         stream: false,
-        temperature: 0.3,
+        temperature: 0.2,
         max_tokens: 120
       })
     });
-    if (!res.ok) return [];
+    if (!res.ok) return { skip: false, queries: [] };
     const data = await res.json();
     const text = (data?.choices?.[0]?.message?.content || '').trim();
-    const lines = text.split(/\n/).map((s) => s.replace(/^["'\d.)\s]+|["']+$/g, '').trim()).filter((s) => s.length > 0 && s.length <= 200);
+    if (/^skip$/im.test((text.split('\n')[0] || '').trim())) return { skip: true, queries: [] };
+    const lines = text.split(/\n/).map((s) => s.replace(/^["'\d.)\s]+|["']+$/g, '').trim()).filter((s) => s.length > 0 && s.length <= 200 && !/^skip$/i.test(s));
     const queries = lines.slice(0, 3);
     if (queries.length) log('info', 'AI 生成多路搜索词', { count: queries.length, queries }, 'search');
-    return queries;
+    return { skip: false, queries };
   } catch (e) {
     log('warn', 'AI 生成多路搜索词失败', e.message);
-    return [];
+    return { skip: false, queries: [] };
   }
 }
 
@@ -3466,6 +3485,8 @@ const plugin_init = async (ctxOrCore, _obContext, _actions, _instance) => {
         if (body.uapiSort !== undefined) cfg.uapiSort = str('uapiSort', '');
         if (body.uapiTimeRange !== undefined) cfg.uapiTimeRange = str('uapiTimeRange', '');
         if (body.logLevel !== undefined) cfg.logLevel = ['debug', 'info', 'warn', 'error'].includes(String(body.logLevel)) ? body.logLevel : 'info';
+        if (body.logsRefreshIntervalSec !== undefined) cfg.logsRefreshIntervalSec = num('logsRefreshIntervalSec', 2, 1, 60);
+        if (body.logsScrollMode !== undefined) cfg.logsScrollMode = ['down', 'up'].includes(String(body.logsScrollMode)) ? body.logsScrollMode : 'down';
         if (body.appendStickerAfterReply !== undefined) cfg.appendStickerAfterReply = bool('appendStickerAfterReply', false);
         if (body.pokeAfterReply !== undefined) cfg.pokeAfterReply = bool('pokeAfterReply', false);
         if (body.pokeMode !== undefined) cfg.pokeMode = ['never', 'always', 'random', 'ai'].includes(String(body.pokeMode).toLowerCase()) ? String(body.pokeMode).toLowerCase() : 'never';
@@ -4268,36 +4289,67 @@ const plugin_onmessage = async (ctx, event) => {
 
   if (cfg.webSearchEnabled && imageUrls.length === 0) {
     const historySummary = history.slice(-4).map((h) => h.content).join(' ').slice(0, 300);
-    const smartMode = (cfg.smartSearchQueryMode || 'fixed').toLowerCase();
+    const smartMode = (cfg.smartSearchQueryMode || 'ai').toLowerCase();
     const triple = !!cfg.webSearchTriple;
     let searchResult = '';
 
-    if (triple) {
-      const queries = await aiGenerateSearchQueries(userText, historySummary);
-      const fallback = (cfg.webSearchQuery || '').trim();
-      const qList = queries.length >= 2 ? queries : (queries.length === 1 ? [queries[0], fallback, fallback].filter(Boolean) : [fallback, fallback, fallback].filter(Boolean)).slice(0, 3);
-      log('info', '三路联合搜索开始', { provider: cfg.webSearchProvider, queries: qList, count: qList.length }, 'search');
-      const parts = [];
-      for (let i = 0; i < qList.length; i++) {
-        const q = qList[i];
-        const one = await webSearchMulti(q, cfg);
-        if (one) parts.push(`【搜索 ${i + 1} - 关键词: "${q.slice(0, 50)}"】\n${one}`);
-        log('debug', '单路搜索完成', { index: i + 1, query: q.slice(0, 60), resultLen: (one || '').length });
-      }
-      searchResult = parts.join('\n\n---\n\n');
-    } else {
-      let query = (cfg.webSearchQuery || '').trim();
-      if (smartMode === 'ai') {
-        const aiQuery = await aiGenerateSearchQuery(userText, historySummary);
-        if (aiQuery) {
-          query = aiQuery;
-          log('info', 'AI 生成搜索词', { query });
-        } else {
-          log('info', 'AI 未生成搜索词，使用默认', { defaultQuery: query.slice(0, 60) });
+    if (shouldSkipWebSearchByHeuristic(userText)) {
+      log('info', '跳过联网搜索', { reason: '寒暄或无需检索' }, 'search');
+    } else if (triple) {
+      const decided = smartMode === 'ai'
+        ? await aiGenerateSearchQueries(userText, historySummary)
+        : { skip: false, queries: [] };
+      if (decided.skip) {
+        log('info', 'AI 判断无需联网搜索', null, 'search');
+      } else {
+        const fixed = (cfg.webSearchQuery || '').trim();
+        const fallback = buildSearchFallbackQuery(userText);
+        let qList = decided.queries || [];
+        if (smartMode === 'fixed') {
+          qList = fixed ? [fixed] : (fallback ? [fallback] : []);
+        } else if (!qList.length) {
+          qList = fallback ? [fallback] : [];
+          if (qList.length) log('info', 'AI 未生成搜索词，使用用户问题', { query: qList[0].slice(0, 60) });
+        }
+        if (qList.length >= 2) {
+          // keep
+        } else if (qList.length === 1 && fixed && smartMode === 'ai') {
+          qList = [qList[0], fixed].slice(0, 3);
+        } else if (qList.length === 1) {
+          qList = [qList[0]];
+        }
+        if (qList.length) {
+          log('info', '三路联合搜索开始', { provider: cfg.webSearchProvider, queries: qList, count: qList.length }, 'search');
+          const parts = [];
+          for (let i = 0; i < qList.length; i++) {
+            const q = qList[i];
+            const one = await webSearchMulti(q, cfg);
+            if (one) parts.push(`【搜索 ${i + 1} - 关键词: "${q.slice(0, 50)}"】\n${one}`);
+            log('debug', '单路搜索完成', { index: i + 1, query: q.slice(0, 60), resultLen: (one || '').length });
+          }
+          searchResult = parts.join('\n\n---\n\n');
         }
       }
-      log('info', '联网搜索开始', { provider: cfg.webSearchProvider, query: query.slice(0, 100) }, 'search');
-      searchResult = await webSearchMulti(query, cfg);
+    } else {
+      let query = '';
+      if (smartMode === 'fixed') {
+        query = (cfg.webSearchQuery || '').trim() || buildSearchFallbackQuery(userText);
+      } else {
+        const decided = await aiGenerateSearchQuery(userText, historySummary);
+        if (decided.skip) {
+          log('info', 'AI 判断无需联网搜索', null, 'search');
+        } else if (decided.query) {
+          query = decided.query;
+          log('info', 'AI 生成搜索词', { query });
+        } else {
+          query = buildSearchFallbackQuery(userText);
+          if (query) log('info', 'AI 未生成搜索词，使用用户问题', { query: query.slice(0, 60) });
+        }
+      }
+      if (query) {
+        log('info', '联网搜索开始', { provider: cfg.webSearchProvider, query: query.slice(0, 100) }, 'search');
+        searchResult = await webSearchMulti(query, cfg);
+      }
     }
 
     if (searchResult) {
