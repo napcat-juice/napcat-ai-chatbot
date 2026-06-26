@@ -1,5 +1,21 @@
 # 更新日志
 
+## [2.7.5] — 2026-06-26
+
+### 新增
+
+- **Browser-Use 引擎支持**：Agent 浏览器新增 `browser-use` 引擎选项，可通过 `agentBrowserEngine` 配置在 Playwright 与 Browser-Use 之间切换，并支持独立的模型、API Key、最大步数等参数（`agentBrowserUseModel`、`agentBrowserUseMaxSteps` 等）。
+- **Browser-Use 环境管理 API**：新增 `/browser-use/env/status`、`/browser-use/env/progress`、`/browser-use/env/install` 接口，支持查询安装状态、实时进度及一键安装 browser-use 环境，安装成功后自动切换引擎配置。
+- **`browser_use_task` 工具**：Agent 工具链新增自然语言浏览器任务工具，可通过 `task` 参数描述意图，由 browser-use 引擎自动完成多步操作。
+- **Shell 窗口可见性控制**：新增 `agentShellVisible` 配置项，允许控制 Shell 执行窗口是否可见。
+
+### 改进
+
+- **浏览器无头模式可配置**：Playwright 引擎的无头模式改为通过 `agentBrowserHeadless` 控制（默认 `false`，即有头模式），方便调试和查看操作过程。
+- **可见窗口自动关闭延迟**：有头模式下浏览器操作完成后会延迟关闭（默认 8 秒，可通过 `agentBrowserVisibleCloseDelayMs` 调整），并在操作结果中提示剩余倒计时。
+
+---
+
 ## [2.7.4] — 2026-06-25
 
 ### 改进

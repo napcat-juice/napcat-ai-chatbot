@@ -409,6 +409,7 @@ const DEFAULT_CONFIG = {
   agentShellType: 'auto',
   agentShellTimeoutMs: 120000,
   agentShellBlockPatterns: [],
+  agentShellVisible: true,
   agentToolWebSearchEnabled: true,
   agentToolCurrentTimeEnabled: true,
   agentToolMcpEnabled: true,
@@ -430,7 +431,19 @@ const DEFAULT_CONFIG = {
   agentDangerOnFileDelete: true,
   agentDangerOnRegistryWrite: true,
   agentBrowserEnabled: false,
+  agentBrowserEngine: 'playwright',
   agentBrowserUsePlaywright: true,
+  agentBrowserHeadless: false,
+  agentBrowserVisibleCloseDelayMs: 8000,
+  agentBrowserUseEnvReady: false,
+  agentBrowserUseSameLlm: true,
+  agentBrowserUseProvider: 'openai',
+  agentBrowserUseApiUrl: '',
+  agentBrowserUseApiKey: '',
+  agentBrowserUseModel: 'gpt-4o-mini',
+  agentBrowserUseMaxSteps: 30,
+  agentBrowserUseTimeoutMs: 300000,
+  agentToolBrowserUseTaskEnabled: true,
   agentBrowserAdvancedEnabled: true,
   agentBrowserUserAgent: '',
   agentBrowserExtraHeaders: {},
@@ -4116,6 +4129,7 @@ const plugin_init = async (ctxOrCore, _obContext, _actions, _instance) => {
         if (body.agentShellType !== undefined) cfg.agentShellType = String(body.agentShellType || 'auto');
         if (body.agentShellTimeoutMs !== undefined) cfg.agentShellTimeoutMs = num('agentShellTimeoutMs', 120000, 5000, 600000);
         if (body.agentShellBlockPatterns !== undefined) cfg.agentShellBlockPatterns = Array.isArray(body.agentShellBlockPatterns) ? body.agentShellBlockPatterns.map(String).filter(Boolean) : [];
+        if (body.agentShellVisible !== undefined) cfg.agentShellVisible = Boolean(body.agentShellVisible);
         if (body.agentToolWebSearchEnabled !== undefined) cfg.agentToolWebSearchEnabled = Boolean(body.agentToolWebSearchEnabled);
         if (body.agentToolCurrentTimeEnabled !== undefined) cfg.agentToolCurrentTimeEnabled = Boolean(body.agentToolCurrentTimeEnabled);
         if (body.agentToolMcpEnabled !== undefined) cfg.agentToolMcpEnabled = Boolean(body.agentToolMcpEnabled);
@@ -4135,7 +4149,22 @@ const plugin_init = async (ctxOrCore, _obContext, _actions, _instance) => {
         if (body.agentDangerOnFileDelete !== undefined) cfg.agentDangerOnFileDelete = Boolean(body.agentDangerOnFileDelete);
         if (body.agentDangerOnRegistryWrite !== undefined) cfg.agentDangerOnRegistryWrite = Boolean(body.agentDangerOnRegistryWrite);
         if (body.agentBrowserEnabled !== undefined) cfg.agentBrowserEnabled = Boolean(body.agentBrowserEnabled);
+        if (body.agentBrowserEngine !== undefined) {
+          const eng = String(body.agentBrowserEngine || 'playwright').toLowerCase();
+          cfg.agentBrowserEngine = eng === 'browser-use' ? 'browser-use' : 'playwright';
+        }
         if (body.agentBrowserUsePlaywright !== undefined) cfg.agentBrowserUsePlaywright = Boolean(body.agentBrowserUsePlaywright);
+        if (body.agentBrowserHeadless !== undefined) cfg.agentBrowserHeadless = Boolean(body.agentBrowserHeadless);
+        if (body.agentBrowserVisibleCloseDelayMs !== undefined) cfg.agentBrowserVisibleCloseDelayMs = num('agentBrowserVisibleCloseDelayMs', 8000, 1000, 120000);
+        if (body.agentBrowserUseEnvReady !== undefined) cfg.agentBrowserUseEnvReady = Boolean(body.agentBrowserUseEnvReady);
+        if (body.agentBrowserUseSameLlm !== undefined) cfg.agentBrowserUseSameLlm = Boolean(body.agentBrowserUseSameLlm);
+        if (body.agentBrowserUseProvider !== undefined) cfg.agentBrowserUseProvider = String(body.agentBrowserUseProvider || 'openai').toLowerCase();
+        if (body.agentBrowserUseApiUrl !== undefined) cfg.agentBrowserUseApiUrl = String(body.agentBrowserUseApiUrl || '').trim();
+        if (body.agentBrowserUseApiKey !== undefined) cfg.agentBrowserUseApiKey = String(body.agentBrowserUseApiKey || '').trim();
+        if (body.agentBrowserUseModel !== undefined) cfg.agentBrowserUseModel = String(body.agentBrowserUseModel || '').trim();
+        if (body.agentBrowserUseMaxSteps !== undefined) cfg.agentBrowserUseMaxSteps = num('agentBrowserUseMaxSteps', 30, 5, 80);
+        if (body.agentBrowserUseTimeoutMs !== undefined) cfg.agentBrowserUseTimeoutMs = num('agentBrowserUseTimeoutMs', 300000, 60000, 900000);
+        if (body.agentToolBrowserUseTaskEnabled !== undefined) cfg.agentToolBrowserUseTaskEnabled = Boolean(body.agentToolBrowserUseTaskEnabled);
         if (body.agentBrowserAdvancedEnabled !== undefined) cfg.agentBrowserAdvancedEnabled = Boolean(body.agentBrowserAdvancedEnabled);
         if (body.agentBrowserUserAgent !== undefined) cfg.agentBrowserUserAgent = String(body.agentBrowserUserAgent || '').trim();
         if (body.agentBrowserExtraHeaders !== undefined) cfg.agentBrowserExtraHeaders = body.agentBrowserExtraHeaders && typeof body.agentBrowserExtraHeaders === 'object' && !Array.isArray(body.agentBrowserExtraHeaders) ? body.agentBrowserExtraHeaders : {};
@@ -5064,6 +5093,51 @@ const plugin_init = async (ctxOrCore, _obContext, _actions, _instance) => {
           Object.assign(pluginState.config, partial);
           saveConfig(ctx);
         }).catch((e) => log('error', 'Playwright 安装失败', e.message, 'skillhub'));
+      });
+
+      router.getNoAuth('/browser-use/env/status', async (_, res) => {
+        try {
+          const bu = await import('./lib/agent-browser-use.mjs');
+          const cfg = pluginState.config || {};
+          const status = await bu.getBrowserUseEnvStatus(__dirname, cfg);
+          res.json({ success: true, data: status, mirrors: bu.PIP_MIRRORS || [] });
+        } catch (e) {
+          res.json({ success: false, error: e?.message || String(e) });
+        }
+      });
+
+      router.getNoAuth('/browser-use/env/progress', async (req, res) => {
+        try {
+          const bu = await import('./lib/agent-browser-use.mjs');
+          const since = Number(req.query?.since) || 0;
+          res.json({ success: true, ...bu.getBrowserUseSetupState(since) });
+        } catch (e) {
+          res.json({ success: false, error: e?.message || String(e) });
+        }
+      });
+
+      router.postNoAuth('/browser-use/env/install', async (req, res) => {
+        try {
+          const bu = await import('./lib/agent-browser-use.mjs');
+          const state = bu.getBrowserUseSetupState(0);
+          if (state.running) {
+            res.json({ success: false, error: 'browser-use 安装任务进行中' });
+            return;
+          }
+          const mirror = String(req.body?.mirror || 'auto').trim();
+          res.json({ success: true, started: true });
+          const ctx = pluginState.runtimeCtx;
+          bu.installAgentBrowserUse(__dirname, { mirror }).then((result) => {
+            if (result.ok) {
+              pluginState.config.agentBrowserUseEnvReady = true;
+              pluginState.config.agentBrowserEnabled = true;
+              pluginState.config.agentBrowserEngine = 'browser-use';
+              saveConfig(ctx);
+            }
+          }).catch((e) => log('error', 'browser-use 安装失败', e.message, 'agent'));
+        } catch (e) {
+          res.json({ success: false, error: e?.message || String(e) });
+        }
       });
 
       router.getNoAuth('/skillhub/search', async (req, res) => {
