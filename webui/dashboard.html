@@ -4569,7 +4569,7 @@ npx playwright install chromium</pre>
         </div>
         <div class="sidebar-brand-text">
           <h1>Chat Bot</h1>
-          <span id="sidebar-version">NapCat 插件 · v2.8.0</span>
+          <span id="sidebar-version">NapCat 插件 · v2.8.1</span>
         </div>
       </div>
       <nav class="sidebar-nav">
@@ -5242,7 +5242,7 @@ npx playwright install chromium</pre>
 
       <div id="pg-stickers" class="page">
         <h2 class="page-title">表情管理</h2>
-        <p class="page-desc">从当前登录 QQ 账号拉取收藏表情，勾选参与发送的表情池，支持 AI / 随机 / 权重 / 固定 四种选择方式。</p>
+        <p class="page-desc">从当前登录 QQ 账号拉取收藏表情，勾选参与发送的表情池。AI 智能选择采用 MaiBot 拼图视觉匹配（需配置视觉 API；可选安装 sharp 以生成拼图）。</p>
         <div class="section" style="padding:0;overflow:hidden">
           <div class="section-title" style="margin:0">发送策略</div>
           <div class="form-row">
@@ -5252,11 +5252,23 @@ npx playwright install chromium</pre>
           <div class="form-row">
             <div class="form-label">选择方式</div>
             <select class="ipt" id="cfg-stickerSelectMode" style="max-width:240px" onchange="onStickerModeChange()">
-              <option value="ai">AI 智能选择</option>
+              <option value="ai">AI 拼图视觉选择（MaiBot）</option>
               <option value="random">随机（均等概率）</option>
               <option value="weighted">权重随机</option>
               <option value="fixed">固定表情</option>
             </select>
+          </div>
+          <div class="form-row" id="row-stickerAiOpts">
+            <div class="form-label">候选采样数量<div class="hint">每次从表情池随机抽取 N 个拼成网格，1–64，默认 25</div></div>
+            <input type="number" class="ipt" id="cfg-stickerSendNum" min="1" max="64" value="25" style="max-width:80px" />
+          </div>
+          <div class="form-row" id="row-stickerSelectionPrompt">
+            <div class="form-label">表情选择提示词<div class="hint">变量：{grid_rows} {grid_columns} {emoji_count}；须返回 JSON emoji_index</div></div>
+            <div class="kv-editor-inline">
+              <div class="kv-editor-summary" id="sum-stickerSelectionPrompt">MaiBot 默认拼图选择提示词</div>
+              <button type="button" class="btn btn-s" onclick="openStructuredEditor('stickerSelectionPrompt')"><span class="material-symbols-outlined">edit_note</span>编辑提示词</button>
+            </div>
+            <textarea class="ipt" id="cfg-stickerSelectionPrompt" style="display:none"></textarea>
           </div>
           <div class="form-row" id="row-stickerFixed" style="display:none">
             <div class="form-label">固定表情<div class="hint">在下方网格点击「设为固定」</div></div>
@@ -6263,7 +6275,7 @@ npx playwright install chromium</pre>
             <textarea class="ipt" id="cfg-fakeHumanEmojiList" placeholder="哈&#10;6&#10;草" style="display:none"></textarea>
           </div>
           <div class="form-row">
-            <div class="form-label">AI 人设（一句插话）<div class="hint">回复模式为 AI 或混合时，用于生成短句的系统提示</div></div>
+            <div class="form-label">AI 人设（一句插话）<div class="hint">旧版兼容字段；若已配置下方「回复模板」则优先使用模板</div></div>
             <div class="kv-editor-inline">
               <div class="kv-editor-summary" id="sum-fakeHumanSystemPrompt">未设置 AI 插话人设</div>
               <button type="button" class="btn btn-s" onclick="openStructuredEditor('fakeHumanSystemPrompt')"><span class="material-symbols-outlined">edit_note</span>编辑人设</button>
@@ -6271,15 +6283,59 @@ npx playwright install chromium</pre>
             <textarea class="ipt" id="cfg-fakeHumanSystemPrompt" style="display:none" placeholder="你是一个在群聊里偶尔插话的真人，回复一两句非常短的话..."></textarea>
           </div>
           <div class="form-row">
+            <div class="form-label">机器人名称<div class="hint">提示词变量 {bot_name}</div></div>
+            <input type="text" class="ipt" id="cfg-fakeHumanBotName" placeholder="机器人" style="max-width:160px" />
+          </div>
+          <div class="form-row">
+            <div class="form-label">人格设定<div class="hint">变量 {identity}，用于回复模板</div></div>
+            <div class="kv-editor-inline">
+              <div class="kv-editor-summary" id="sum-fakeHumanIdentity">大二女大学生人设</div>
+              <button type="button" class="btn btn-s" onclick="openStructuredEditor('fakeHumanIdentity')"><span class="material-symbols-outlined">person</span>编辑人格</button>
+            </div>
+            <textarea class="ipt" id="cfg-fakeHumanIdentity" style="display:none"></textarea>
+          </div>
+          <div class="form-row">
+            <div class="form-label">表达风格<div class="hint">变量 {reply_style}</div></div>
+            <div class="kv-editor-inline">
+              <div class="kv-editor-summary" id="sum-fakeHumanReplyStyle">平淡简短风格</div>
+              <button type="button" class="btn btn-s" onclick="openStructuredEditor('fakeHumanReplyStyle')"><span class="material-symbols-outlined">format_quote</span>编辑风格</button>
+            </div>
+            <textarea class="ipt" id="cfg-fakeHumanReplyStyle" style="display:none"></textarea>
+          </div>
+          <div class="form-row">
+            <div class="form-label">回复模板（MaiBot）<div class="hint">变量：{identity} {reply_style} {group_chat_attention_block} {replyer_output_instruction} {bot_name}</div></div>
+            <div class="kv-editor-inline">
+              <div class="kv-editor-summary" id="sum-fakeHumanReplyPrompt">MaiBot 回复模板</div>
+              <button type="button" class="btn btn-s" onclick="openStructuredEditor('fakeHumanReplyPrompt')"><span class="material-symbols-outlined">edit_note</span>编辑回复模板</button>
+            </div>
+            <textarea class="ipt" id="cfg-fakeHumanReplyPrompt" style="display:none"></textarea>
+          </div>
+          <div class="form-row">
+            <div class="form-label">行动 3 选 1 提示词<div class="hint">AI 选择 回复/@/戳 时使用</div></div>
+            <div class="kv-editor-inline">
+              <div class="kv-editor-summary" id="sum-fakeHumanActionChoosePrompt">默认 3 选 1 提示词</div>
+              <button type="button" class="btn btn-s" onclick="openStructuredEditor('fakeHumanActionChoosePrompt')"><span class="material-symbols-outlined">psychology</span>编辑</button>
+            </div>
+            <textarea class="ipt" id="cfg-fakeHumanActionChoosePrompt" style="display:none"></textarea>
+          </div>
+          <div class="form-row">
+            <div class="form-label">图片描述提示词<div class="hint">用户发图时先描述图片再生成文字回复</div></div>
+            <div class="kv-editor-inline">
+              <div class="kv-editor-summary" id="sum-fakeHumanImageDescribePrompt">默认图片描述提示词</div>
+              <button type="button" class="btn btn-s" onclick="openStructuredEditor('fakeHumanImageDescribePrompt')"><span class="material-symbols-outlined">image</span>编辑</button>
+            </div>
+            <textarea class="ipt" id="cfg-fakeHumanImageDescribePrompt" style="display:none"></textarea>
+          </div>
+          <div class="form-row">
             <div class="form-label">AI 回复最大字数</div>
             <input type="number" class="ipt" id="cfg-fakeHumanMaxLength" min="10" max="200" value="80" style="max-width:80px" />
           </div>
           <div class="form-row">
-            <div class="form-label">解析用户图片<div class="hint">用户发图时获取图片内容，由视觉模型分析后插话（需 API 支持多模态）</div></div>
+            <div class="form-label">解析用户图片<div class="hint">用户发图时先用视觉 API 描述图片，再交给文字模型插话（需配置视觉 API Key）</div></div>
             <div class="tgl" id="tgl-fakeHumanParseImage" onclick="toggle(this,'fakeHumanParseImage')"></div>
           </div>
           <div class="form-row">
-            <div class="form-label">视觉模型（可选）<div class="hint">分析图片时使用的模型，留空则用上方通用对话模型</div></div>
+            <div class="form-label">视觉模型（可选）<div class="hint">图片描述时使用的模型，留空则用 Kimi/视觉配置中的模型</div></div>
             <input type="text" class="ipt" id="cfg-fakeHumanVisionModel" placeholder="如 deepseek-chat 或留空" style="max-width:240px" />
           </div>
         </div>
@@ -8579,6 +8635,11 @@ npx playwright install chromium</pre>
       const mode = (document.getElementById('cfg-stickerSelectMode')?.value || 'ai').toLowerCase();
       const fixedRow = document.getElementById('row-stickerFixed');
       if (fixedRow) fixedRow.style.display = mode === 'fixed' ? 'flex' : 'none';
+      const aiOpts = document.getElementById('row-stickerAiOpts');
+      const aiPrompt = document.getElementById('row-stickerSelectionPrompt');
+      const showAi = mode === 'ai';
+      if (aiOpts) aiOpts.style.display = showAi ? 'flex' : 'none';
+      if (aiPrompt) aiPrompt.style.display = showAi ? 'flex' : 'none';
       const weightEnabled = mode === 'weighted';
       document.querySelectorAll('.sticker-weight-input').forEach((el) => { el.disabled = !weightEnabled; });
       renderStickerGrid();
@@ -8604,8 +8665,13 @@ npx playwright install chromium</pre>
       if (favTgl) favTgl.classList.toggle('on', config.stickerRandomFromFavorites !== false);
       const countEl = document.getElementById('cfg-stickerFaceCount');
       if (countEl) countEl.value = config.stickerFaceCount ?? 48;
+      const sendNumEl = document.getElementById('cfg-stickerSendNum');
+      if (sendNumEl) sendNumEl.value = config.stickerSendNum ?? 25;
+      const selPromptEl = document.getElementById('cfg-stickerSelectionPrompt');
+      if (selPromptEl) selPromptEl.value = config.stickerSelectionPrompt || '';
       mergeStickerCatalogWithPool();
       onStickerModeChange();
+      refreshStructuredSummary('stickerSelectionPrompt');
     }
 
     function mergeStickerCatalogWithPool() {
@@ -8765,6 +8831,8 @@ npx playwright install chromium</pre>
       cfg.stickerFixedId = (document.getElementById('cfg-stickerFixedId')?.value || '').trim();
       cfg.stickerRandomFromFavorites = document.getElementById('tgl-stickerRandomFromFavorites')?.classList.contains('on') !== false;
       cfg.stickerFaceCount = Math.max(1, Math.min(100, parseInt(document.getElementById('cfg-stickerFaceCount')?.value, 10) || 48));
+      cfg.stickerSendNum = Math.max(1, Math.min(64, parseInt(document.getElementById('cfg-stickerSendNum')?.value, 10) || 25));
+      cfg.stickerSelectionPrompt = (document.getElementById('cfg-stickerSelectionPrompt')?.value || '').trim();
       cfg.stickerPool = collectStickerPoolFromUI();
       try {
         const res = await fetch(BASE + '/config', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(cfg) });
@@ -9067,6 +9135,18 @@ npx playwright install chromium</pre>
       document.getElementById('cfg-fakeHumanTextList').value = Array.isArray(config.fakeHumanTextList) ? config.fakeHumanTextList.join('\n') : (config.fakeHumanTextList || '哈哈\n确实\n666').replace(/,/g, '\n');
       document.getElementById('cfg-fakeHumanEmojiList').value = Array.isArray(config.fakeHumanEmojiList) ? config.fakeHumanEmojiList.join('\n') : (config.fakeHumanEmojiList || '哈\n6\n草').replace(/,/g, '\n');
       document.getElementById('cfg-fakeHumanSystemPrompt').value = config.fakeHumanSystemPrompt || '';
+      const fhBotName = document.getElementById('cfg-fakeHumanBotName');
+      if (fhBotName) fhBotName.value = config.fakeHumanBotName || '机器人';
+      const fhIdentity = document.getElementById('cfg-fakeHumanIdentity');
+      if (fhIdentity) fhIdentity.value = config.fakeHumanIdentity || '';
+      const fhReplyStyle = document.getElementById('cfg-fakeHumanReplyStyle');
+      if (fhReplyStyle) fhReplyStyle.value = config.fakeHumanReplyStyle || '';
+      const fhReplyPrompt = document.getElementById('cfg-fakeHumanReplyPrompt');
+      if (fhReplyPrompt) fhReplyPrompt.value = config.fakeHumanReplyPrompt || '';
+      const fhActionPrompt = document.getElementById('cfg-fakeHumanActionChoosePrompt');
+      if (fhActionPrompt) fhActionPrompt.value = config.fakeHumanActionChoosePrompt || '';
+      const fhImgPrompt = document.getElementById('cfg-fakeHumanImageDescribePrompt');
+      if (fhImgPrompt) fhImgPrompt.value = config.fakeHumanImageDescribePrompt || '';
       document.getElementById('cfg-fakeHumanMaxLength').value = config.fakeHumanMaxLength ?? 80;
       document.getElementById('cfg-fakeHumanAtChance').value = config.fakeHumanAtChance ?? 0.25;
       document.getElementById('cfg-fakeHumanAtWho').value = (config.fakeHumanAtWho || 'sender').toLowerCase();
@@ -9623,22 +9703,57 @@ npx playwright install chromium</pre>
       },
       fakeHumanSystemPrompt: {
         title: 'AI 人设（一句插话）',
-        desc: '设置伪人 AI 的一句话风格提示。',
+        desc: '旧版兼容字段；若已配置回复模板则优先使用模板。',
+        valueType: 'text'
+      },
+      fakeHumanIdentity: {
+        title: '人格设定',
+        desc: 'MaiBot 风格人格，用于 {identity} 变量。',
+        valueType: 'text'
+      },
+      fakeHumanReplyStyle: {
+        title: '表达风格',
+        desc: 'MaiBot 风格表达，用于 {reply_style} 变量。',
+        valueType: 'text'
+      },
+      fakeHumanReplyPrompt: {
+        title: '回复模板',
+        desc: 'MaiBot 回复生成模板，支持 {identity} {reply_style} {bot_name} 等变量。',
+        valueType: 'text'
+      },
+      fakeHumanActionChoosePrompt: {
+        title: '行动 3 选 1 提示词',
+        desc: 'AI 选择 回复/@/戳 时使用。',
+        valueType: 'text'
+      },
+      fakeHumanImageDescribePrompt: {
+        title: '图片描述提示词',
+        desc: '用户发图时先描述图片内容。',
+        valueType: 'text'
+      },
+      stickerSelectionPrompt: {
+        title: '表情拼图选择提示词',
+        desc: 'MaiBot 风格，变量 {grid_rows} {grid_columns} {emoji_count}，返回 JSON emoji_index。',
         valueType: 'text'
       }
     };
 
+    const STRUCTURED_TEXT_TYPES = new Set([
+      'fakeHumanSystemPrompt', 'fakeHumanIdentity', 'fakeHumanReplyStyle', 'fakeHumanReplyPrompt',
+      'fakeHumanActionChoosePrompt', 'fakeHumanImageDescribePrompt', 'stickerSelectionPrompt'
+    ]);
+
     function parseStructuredItems(type, raw) {
       if (type === 'fakeHumanTextList') return String(raw || '').split(/\r?\n/).map((s) => s.trim()).filter(Boolean).map((v) => ({ value: v }));
       if (type === 'fakeHumanEmojiList') return String(raw || '').split(/[\r\n,，]+/).map((s) => s.trim()).filter(Boolean).map((v) => ({ value: v }));
-      if (type === 'fakeHumanSystemPrompt') return [{ value: String(raw || '') }];
+      if (STRUCTURED_TEXT_TYPES.has(type)) return [{ value: String(raw || '') }];
       const kv = parseKeyValueLines(raw || '', structuredKeyParser(type));
       return Object.keys(kv).map((k) => ({ key: k, value: kv[k] }));
     }
 
     function serializeStructuredItems(type, items) {
       if (type === 'fakeHumanTextList' || type === 'fakeHumanEmojiList') return (items || []).map((x) => String(x.value || '').trim()).filter(Boolean).join('\n');
-      if (type === 'fakeHumanSystemPrompt') return String((items && items[0] && items[0].value) || '').trim();
+      if (STRUCTURED_TEXT_TYPES.has(type)) return String((items && items[0] && items[0].value) || '').trim();
       const keyParser = structuredKeyParser(type);
       return (items || []).map((x) => {
         let k = String(x.key || '').trim();
@@ -9658,7 +9773,13 @@ npx playwright install chromium</pre>
           fakeHumanGroupChance: '暂无按群概率覆盖（使用全局概率）',
           fakeHumanTextList: '默认短句：哈哈、确实、666',
           fakeHumanEmojiList: '默认 Emoji：哈、6、草',
-          fakeHumanSystemPrompt: '未设置 AI 插话人设'
+          fakeHumanSystemPrompt: '未设置 AI 插话人设',
+          fakeHumanIdentity: '未设置人格设定',
+          fakeHumanReplyStyle: '未设置表达风格',
+          fakeHumanReplyPrompt: '未设置回复模板',
+          fakeHumanActionChoosePrompt: '未设置 3 选 1 提示词',
+          fakeHumanImageDescribePrompt: '未设置图片描述提示词',
+          stickerSelectionPrompt: '未设置表情选择提示词'
         };
         return emptyMap[type] || '暂无数据';
       }
@@ -9668,7 +9789,7 @@ npx playwright install chromium</pre>
       if (type === 'fakeHumanGroupChance') return '已配置 ' + items.length + ' 条群概率覆盖';
       if (type === 'fakeHumanTextList') return '已配置 ' + items.length + ' 条随机短句';
       if (type === 'fakeHumanEmojiList') return '已配置 ' + items.length + ' 个 Emoji/词条';
-      if (type === 'fakeHumanSystemPrompt') return '已配置 AI 插话人设（' + Math.min(String(raw || '').length, 120) + ' 字）';
+      if (STRUCTURED_TEXT_TYPES.has(type)) return '已配置（' + String(raw || '').length + ' 字）';
       return '已配置';
     }
 
@@ -9692,6 +9813,7 @@ npx playwright install chromium</pre>
       if (!structuredEditorState.items.length && (type === 'fakeHumanTextList')) structuredEditorState.items = [{ value: '哈哈' }, { value: '确实' }, { value: '666' }];
       if (!structuredEditorState.items.length && (type === 'fakeHumanEmojiList')) structuredEditorState.items = [{ value: '哈' }, { value: '6' }, { value: '草' }];
       if (!structuredEditorState.items.length && (type === 'fakeHumanSystemPrompt')) structuredEditorState.items = [{ value: '' }];
+      if (!structuredEditorState.items.length && STRUCTURED_TEXT_TYPES.has(type) && type !== 'fakeHumanSystemPrompt') structuredEditorState.items = [{ value: '' }];
       const titleEl = document.getElementById('structured-editor-title');
       const descEl = document.getElementById('structured-editor-desc');
       if (titleEl) titleEl.textContent = meta.title;
@@ -9829,7 +9951,7 @@ npx playwright install chromium</pre>
       if (!type) return;
       const input = document.getElementById('cfg-' + type);
       if (!input) return;
-      if (type === 'fakeHumanSystemPrompt') {
+      if (STRUCTURED_TEXT_TYPES.has(type)) {
         const txt = document.getElementById('structured-editor-text');
         structuredEditorState.items = [{ value: (txt && txt.value) || '' }];
       } else {
@@ -13510,6 +13632,12 @@ npx playwright install chromium</pre>
         fakeHumanTextList: textList.length ? textList : ['哈哈', '确实', '666'],
         fakeHumanEmojiList: emojiList.length ? emojiList : ['哈', '6', '草'],
         fakeHumanSystemPrompt: (document.getElementById('cfg-fakeHumanSystemPrompt') && document.getElementById('cfg-fakeHumanSystemPrompt').value || '').trim(),
+        fakeHumanBotName: ((document.getElementById('cfg-fakeHumanBotName') && document.getElementById('cfg-fakeHumanBotName').value) || '机器人').trim(),
+        fakeHumanIdentity: (document.getElementById('cfg-fakeHumanIdentity') && document.getElementById('cfg-fakeHumanIdentity').value || '').trim(),
+        fakeHumanReplyStyle: (document.getElementById('cfg-fakeHumanReplyStyle') && document.getElementById('cfg-fakeHumanReplyStyle').value || '').trim(),
+        fakeHumanReplyPrompt: (document.getElementById('cfg-fakeHumanReplyPrompt') && document.getElementById('cfg-fakeHumanReplyPrompt').value || '').trim(),
+        fakeHumanActionChoosePrompt: (document.getElementById('cfg-fakeHumanActionChoosePrompt') && document.getElementById('cfg-fakeHumanActionChoosePrompt').value || '').trim(),
+        fakeHumanImageDescribePrompt: (document.getElementById('cfg-fakeHumanImageDescribePrompt') && document.getElementById('cfg-fakeHumanImageDescribePrompt').value || '').trim(),
         fakeHumanMaxLength: Math.max(10, Math.min(200, parseInt(document.getElementById('cfg-fakeHumanMaxLength').value, 10) || 80)),
         fakeHumanAtChance: Math.max(0, Math.min(1, parseFloat(document.getElementById('cfg-fakeHumanAtChance').value) || 0.25)),
         fakeHumanAtWho: (document.getElementById('cfg-fakeHumanAtWho').value || 'sender').toLowerCase(),
@@ -13527,6 +13655,12 @@ npx playwright install chromium</pre>
           config.fakeHumanTextList = body.fakeHumanTextList;
           config.fakeHumanEmojiList = body.fakeHumanEmojiList;
           config.fakeHumanSystemPrompt = body.fakeHumanSystemPrompt;
+          config.fakeHumanBotName = body.fakeHumanBotName;
+          config.fakeHumanIdentity = body.fakeHumanIdentity;
+          config.fakeHumanReplyStyle = body.fakeHumanReplyStyle;
+          config.fakeHumanReplyPrompt = body.fakeHumanReplyPrompt;
+          config.fakeHumanActionChoosePrompt = body.fakeHumanActionChoosePrompt;
+          config.fakeHumanImageDescribePrompt = body.fakeHumanImageDescribePrompt;
           config.fakeHumanMaxLength = body.fakeHumanMaxLength;
           config.fakeHumanAtChance = body.fakeHumanAtChance;
           config.fakeHumanAtWho = body.fakeHumanAtWho;

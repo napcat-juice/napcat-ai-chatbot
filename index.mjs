@@ -68,8 +68,24 @@ import {
   historyLabelForUserMedia,
   parseOutboundMediaSegments,
   segmentToOutboundMessage,
-  isPreviewableTextFile
+  isPreviewableTextFile,
+  buildAgentFileSendBlock,
+  enrichReplyWithAgentFiles
 } from './lib/media-files.mjs';
+import {
+  DEFAULT_STICKER_SELECTION_PROMPT,
+  DEFAULT_FAKEHUMAN_IDENTITY,
+  DEFAULT_FAKEHUMAN_REPLY_STYLE,
+  DEFAULT_FAKEHUMAN_REPLY_PROMPT,
+  DEFAULT_FAKEHUMAN_PLANNER_PROMPT,
+  DEFAULT_FAKEHUMAN_ACTION_CHOOSE_PROMPT,
+  DEFAULT_FAKEHUMAN_IMAGE_DESCRIBE_PROMPT,
+  renderPromptTemplate
+} from './lib/emoji-prompts.mjs';
+import {
+  selectStickerWithVision,
+  touchStickerUsage
+} from './lib/emoji-grid-select.mjs';
 import {
   detectSkillhubCli,
   getSkillhubInstallDir,
@@ -323,6 +339,9 @@ const DEFAULT_CONFIG = {
   stickerFaceCount: 48,
   stickerPool: [],
   stickerFixedId: '',
+  stickerSendNum: 25,
+  stickerSelectionPrompt: DEFAULT_STICKER_SELECTION_PROMPT,
+  stickerUsageStats: {},
   thinkingIndicatorEnabled: false,
   thinkingIndicatorMode: 'message',
   thinkingMessage: '正在思考…',
@@ -388,6 +407,13 @@ const DEFAULT_CONFIG = {
   fakeHumanAtChance: 0.25,
   fakeHumanAtWho: 'sender',
   fakeHumanSystemPrompt: '你是一个在群聊里偶尔插话的真人。根据当前这条群消息，回复一两句非常短的话（不超过30字），可以是吐槽、附和、表情、网络用语。不要长篇大论，不要重复消息内容。',
+  fakeHumanBotName: '机器人',
+  fakeHumanIdentity: DEFAULT_FAKEHUMAN_IDENTITY,
+  fakeHumanReplyStyle: DEFAULT_FAKEHUMAN_REPLY_STYLE,
+  fakeHumanReplyPrompt: DEFAULT_FAKEHUMAN_REPLY_PROMPT,
+  fakeHumanPlannerPrompt: DEFAULT_FAKEHUMAN_PLANNER_PROMPT,
+  fakeHumanActionChoosePrompt: DEFAULT_FAKEHUMAN_ACTION_CHOOSE_PROMPT,
+  fakeHumanImageDescribePrompt: DEFAULT_FAKEHUMAN_IMAGE_DESCRIBE_PROMPT,
   fakeHumanMaxLength: 80,
   fakeHumanParseImage: true,
   fakeHumanVisionModel: '',
@@ -1142,6 +1168,68 @@ async function analyzeImageWithKimi(imageUrls, userQuestion, model) {
 
   if (lastStatus) log('warn', '所有视觉端点均失败', { lastStatus }, 'image');
   return '';
+}
+
+/** 自定义视觉对话（支持多图，用于表情包拼图选择、伪人图片描述等） */
+async function callVisionChatRaw({ systemPrompt, userText, imageUrls, model }) {
+  const urls = (imageUrls || []).filter(Boolean).slice(0, 12);
+  if (!urls.length) return '';
+  const cfg = pluginState.config;
+  const endpoints = buildVisionEndpointList(cfg);
+  if (!endpoints.length) return '';
+  const settings = getVisionFailoverSettings(cfg);
+  const userContent = [
+    { type: 'text', text: String(userText || '').trim() || '请查看图片并按要求回复。' },
+    ...urls.map((url) => ({ type: 'image_url', image_url: { url, detail: 'low' } }))
+  ];
+
+  for (let ei = 0; ei < endpoints.length; ei++) {
+    const endpoint = endpoints[ei];
+    const useModel = (model || endpoint.model || KIMI_CODE_DEFAULT_MODEL).trim() || KIMI_CODE_DEFAULT_MODEL;
+    try {
+      const res = await fetchWithTimeout(endpoint.apiUrl, {
+        method: 'POST',
+        headers: visionHeadersForEndpoint(endpoint, { 'Content-Type': 'application/json' }),
+        body: JSON.stringify({
+          model: useModel,
+          messages: [
+            { role: 'system', content: String(systemPrompt || '').trim() || '你是视觉助手。' },
+            { role: 'user', content: userContent }
+          ],
+          stream: false,
+          temperature: 0.6,
+          max_tokens: 400
+        })
+      }, settings.timeoutMs);
+      const text = await res.text();
+      if (!res.ok) continue;
+      const data = text ? JSON.parse(text) : {};
+      const out = extractKimiMessageText(data?.choices?.[0]?.message);
+      if (out) return out;
+    } catch (e) {
+      log('warn', '视觉对话请求失败', { endpoint: endpoint.name, err: e.message }, 'image');
+    }
+  }
+  return '';
+}
+
+/** 构建伪人 AI 系统提示（MaiBot 风格模板或旧版兼容） */
+function buildFakeHumanSystemPrompt(cfg) {
+  const identity = (cfg.fakeHumanIdentity || DEFAULT_FAKEHUMAN_IDENTITY).trim();
+  const replyStyle = (cfg.fakeHumanReplyStyle || DEFAULT_FAKEHUMAN_REPLY_STYLE).trim();
+  const maxLen = Math.max(10, Math.min(200, Number(cfg.fakeHumanMaxLength) ?? 80));
+  const customReply = (cfg.fakeHumanReplyPrompt || '').trim();
+  if (customReply) {
+    return renderPromptTemplate(customReply, {
+      identity,
+      reply_style: replyStyle,
+      group_chat_attention_block: '',
+      replyer_output_instruction: `回复长度不超过${maxLen}字，不要换行。只输出回复正文。`,
+      bot_name: (cfg.fakeHumanBotName || '机器人').trim()
+    });
+  }
+  const legacy = (cfg.fakeHumanSystemPrompt || DEFAULT_CONFIG.fakeHumanSystemPrompt).trim();
+  return `${legacy}\n回复长度不超过${maxLen}字，不要换行。`;
 }
 
 const ISOLATION_MODES = ['user_group', 'group', 'user', 'none'];
@@ -2906,7 +2994,12 @@ async function deliverChatReply(ctx, { isGroup, groupId, userId, prefix, replyTe
   if (!segments.length) return;
   for (let i = 0; i < segments.length; i++) {
     const body = segmentToOutboundMessage(segments[i]);
-    if (!body) continue;
+    if (!body) {
+      if (segments[i].type === 'file') {
+        log('warn', '文件发送失败：路径不存在或超过 5MB', { path: segments[i].content }, 'chat');
+      }
+      continue;
+    }
     let msg = body;
     if (i === 0 && prefix) {
       const needSpace = prefix && !/[\s\u3000]$/.test(prefix) && !body.startsWith('[CQ:');
@@ -3118,16 +3211,53 @@ function pickWeightedStickerId(candidates) {
 async function buildStickerCandidates(cfg) {
   const pool = normalizeStickerPool(cfg.stickerPool);
   if (pool.length > 0) {
-    return pool.map((p) => ({ id: p.id, weight: p.weight }));
+    return pool.map((p) => ({ id: p.id, weight: p.weight, preview: p.preview, name: p.name }));
   }
   if (cfg.stickerRandomFromFavorites === false) return [];
   const count = Math.max(1, Math.min(100, Number(cfg.stickerFaceCount) || 48));
-  const ids = await fetchCustomFaces(count);
-  return ids.map((id) => ({ id, weight: 1 }));
+  const detailed = await fetchCustomFacesDetailed(count);
+  return detailed.map((f) => ({ id: f.id, weight: 1, preview: f.preview, name: f.name }));
+}
+
+/** MaiBot 风格视觉拼图选表情；失败时回退文本编号选择 */
+async function pickStickerWithGridOrText(cfg, candidates, userText, replyText, contextLines = '') {
+  const withPreview = (candidates || []).filter((c) => c?.id && c.preview);
+  if (withPreview.length >= 2) {
+    try {
+      const pick = await selectStickerWithVision({
+        cfg,
+        candidates: withPreview,
+        userText,
+        replyText,
+        contextLines,
+        callVisionChat: (opts) => callVisionChatRaw({
+          ...opts,
+          model: (cfg.kimiVisionModel || KIMI_CODE_DEFAULT_MODEL).trim()
+        }),
+        promptTemplate: (cfg.stickerSelectionPrompt || DEFAULT_STICKER_SELECTION_PROMPT).trim()
+      });
+      if (pick?.id) {
+        touchStickerUsage(cfg, pick.id);
+        log('info', '拼图视觉选择表情', {
+          id: String(pick.id).slice(0, 40),
+          index: pick.emoji_index,
+          reason: pick.reason,
+          grid: `${pick.grid_rows}x${pick.grid_columns}`,
+          candidates: pick.candidateCount
+        }, 'sticker');
+        return pick.id;
+      }
+    } catch (e) {
+      log('warn', '拼图视觉选表情失败，回退文本选择', e.message, 'sticker');
+    }
+  }
+  const index = await aiPickStickerIndex(userText, replyText, candidates.length);
+  const safeIndex = Math.max(0, Math.min(index, candidates.length - 1));
+  return candidates[safeIndex]?.id || null;
 }
 
 /** 根据配置选取要发送的表情 id */
-async function pickStickerFaceId(cfg, userText, replyText) {
+async function pickStickerFaceId(cfg, userText, replyText, contextLines = '') {
   const candidates = await buildStickerCandidates(cfg);
   if (!candidates.length) return null;
   const mode = String(cfg.stickerSelectMode || 'ai').toLowerCase();
@@ -3140,9 +3270,7 @@ async function pickStickerFaceId(cfg, userText, replyText) {
   if (mode === 'random') {
     return candidates[Math.floor(Math.random() * candidates.length)].id;
   }
-  const index = await aiPickStickerIndex(userText, replyText, candidates.length);
-  const safeIndex = Math.max(0, Math.min(index, candidates.length - 1));
-  return candidates[safeIndex].id;
+  return pickStickerWithGridOrText(cfg, candidates, userText, replyText, contextLines);
 }
 
 /** 判断是否为 URL（收藏表情可能返回 URL，需用 image 段发送） */
@@ -3211,6 +3339,7 @@ async function aiChooseFakeHumanAction(recentContext) {
   const cfg = pluginState.config;
   const { apiUrl, apiKey, model } = getApiConfig();
   if (!apiKey) return 1;
+  const actionPrompt = (cfg.fakeHumanActionChoosePrompt || DEFAULT_FAKEHUMAN_ACTION_CHOOSE_PROMPT).trim();
   try {
     const res = await fetch(apiUrl, {
       method: 'POST',
@@ -3218,7 +3347,7 @@ async function aiChooseFakeHumanAction(recentContext) {
       body: JSON.stringify(buildAuxiliaryChatBody(cfg, {
         model,
         messages: [
-          { role: 'system', content: '根据最近群聊内容，选一种互动方式。只输出一个数字：1=发一段文字/表情回复，2=只@对方，3=只戳一戳对方。不要其他文字。' },
+          { role: 'system', content: actionPrompt },
           { role: 'user', content: '最近群消息：\n' + (recentContext || '').slice(0, 600) + '\n\n输出 1 或 2 或 3：' }
         ],
         max_tokens: 5,
@@ -3325,7 +3454,7 @@ async function tryFakeHumanReply(ctx, event, groupId, userId, plainText) {
   let messageArray = null;
 
   if (pickMode === 'sticker') {
-    const faceId = await pickStickerFaceId(cfg, plainText || recentContext, '');
+    const faceId = await pickStickerFaceId(cfg, plainText || recentContext, '', recentContext);
     if (faceId) {
       messageArray = [{ type: isFaceIdUrl(faceId) ? 'image' : 'face', data: isFaceIdUrl(faceId) ? { file: faceId } : { id: String(faceId) } }];
       sendAsArray = true;
@@ -3340,33 +3469,40 @@ async function tryFakeHumanReply(ctx, event, groupId, userId, plainText) {
     const textList = cfg.fakeHumanTextList || DEFAULT_CONFIG.fakeHumanTextList;
     message = (Array.isArray(textList) && textList.length) ? textList[Math.floor(Math.random() * textList.length)] : '哈哈';
   } else {
-    let userContent = '最近群消息：\n' + (recentContext || (plainText || '')).slice(0, 800) + (personaContext ? '\n' + personaContext.slice(0, 500) : '');
-    if (imageUrls.length) userContent += '\n\n用户本条消息包含图片，请结合图片内容简要插话（若只有图片无文字，就根据图片内容回复一两句）。';
+    let userContent = '【回复信息参考】\n最近群消息：\n' + (recentContext || (plainText || '')).slice(0, 800) + (personaContext ? '\n' + personaContext.slice(0, 500) : '');
+    const visionModel = (cfg.fakeHumanVisionModel || '').trim() || (cfg.kimiVisionModel || KIMI_CODE_DEFAULT_MODEL).trim();
+    if (imageUrls.length && cfg.fakeHumanParseImage) {
+      const descPrompt = (cfg.fakeHumanImageDescribePrompt || DEFAULT_FAKEHUMAN_IMAGE_DESCRIBE_PROMPT).trim();
+      const imageDesc = await callVisionChatRaw({
+        systemPrompt: descPrompt,
+        userText: '请描述这张图片。',
+        imageUrls: [imageUrls[0]],
+        model: visionModel
+      });
+      if (imageDesc) userContent += '\n\n用户本条消息图片内容：' + imageDesc.slice(0, 200);
+      else userContent += '\n\n用户本条消息包含图片，请结合图片语境简要插话。';
+    }
     if (cfg.fakeHumanWebSearch && cfg.webSearchEnabled) {
       const query = (plainText || recentContext.split('\n').pop() || '').slice(0, 50);
       const searchResult = await webSearchMulti(query, cfg);
       if (searchResult) userContent += '\n\n联网参考：\n' + searchResult.slice(0, 400);
     }
     const { apiUrl, apiKey, model } = getApiConfig();
-    const visionModel = (cfg.fakeHumanVisionModel || '').trim() || model || 'deepseek-ai/DeepSeek-V3';
-    const sysPrompt = (cfg.fakeHumanSystemPrompt || DEFAULT_CONFIG.fakeHumanSystemPrompt).trim() || '你是一个在群聊里偶尔插话的真人，回复一两句短话。';
+    const sysPrompt = buildFakeHumanSystemPrompt(cfg);
     const maxLen = Math.max(10, Math.min(200, Number(cfg.fakeHumanMaxLength) ?? 80));
     if (apiKey) {
       try {
-        const userMsg = imageUrls.length > 0
-          ? { role: 'user', content: [{ type: 'text', text: userContent }, ...imageUrls.map((url) => ({ type: 'image_url', image_url: { url } }))] }
-          : { role: 'user', content: userContent };
         const res = await fetch(apiUrl, {
           method: 'POST',
           headers: chatHeadersFromApiConfig({ 'Content-Type': 'application/json' }),
           body: JSON.stringify(buildAuxiliaryChatBody(cfg, {
-            model: visionModel,
+            model,
             messages: [
-              { role: 'system', content: sysPrompt + '\n回复长度不超过' + maxLen + '字，不要换行。' },
-              userMsg
+              { role: 'system', content: sysPrompt },
+              { role: 'user', content: userContent }
             ],
-            max_tokens: 50,
-            temperature: 0.8
+            max_tokens: Math.min(120, maxLen * 2),
+            temperature: 0.85
           }))
         });
         if (res.ok) {
@@ -4197,6 +4333,9 @@ const plugin_init = async (ctxOrCore, _obContext, _actions, _instance) => {
         if (body.stickerFaceCount !== undefined) cfg.stickerFaceCount = Math.max(1, Math.min(100, parseInt(body.stickerFaceCount, 10) || 48));
         if (body.stickerPool !== undefined) cfg.stickerPool = normalizeStickerPool(body.stickerPool);
         if (body.stickerFixedId !== undefined) cfg.stickerFixedId = String(body.stickerFixedId ?? '').trim();
+        if (body.stickerSendNum !== undefined) cfg.stickerSendNum = Math.max(1, Math.min(64, parseInt(body.stickerSendNum, 10) || 25));
+        if (body.stickerSelectionPrompt !== undefined) cfg.stickerSelectionPrompt = String(body.stickerSelectionPrompt || DEFAULT_STICKER_SELECTION_PROMPT).trim() || DEFAULT_STICKER_SELECTION_PROMPT;
+        if (body.stickerUsageStats !== undefined && body.stickerUsageStats && typeof body.stickerUsageStats === 'object') cfg.stickerUsageStats = body.stickerUsageStats;
         if (body.thinkingIndicatorEnabled !== undefined) cfg.thinkingIndicatorEnabled = bool('thinkingIndicatorEnabled', false);
         if (body.thinkingIndicatorMode !== undefined) {
           const tm = String(body.thinkingIndicatorMode).toLowerCase();
@@ -4293,6 +4432,13 @@ const plugin_init = async (ctxOrCore, _obContext, _actions, _instance) => {
         if (body.fakeHumanAtChance !== undefined) cfg.fakeHumanAtChance = Math.max(0, Math.min(1, parseFloat(body.fakeHumanAtChance) || 0.25));
         if (body.fakeHumanAtWho !== undefined) cfg.fakeHumanAtWho = ['sender', 'random'].includes(String(body.fakeHumanAtWho).toLowerCase()) ? String(body.fakeHumanAtWho).toLowerCase() : 'sender';
         if (body.fakeHumanSystemPrompt !== undefined) cfg.fakeHumanSystemPrompt = String(body.fakeHumanSystemPrompt || '').trim();
+        if (body.fakeHumanBotName !== undefined) cfg.fakeHumanBotName = String(body.fakeHumanBotName || '机器人').trim() || '机器人';
+        if (body.fakeHumanIdentity !== undefined) cfg.fakeHumanIdentity = String(body.fakeHumanIdentity || DEFAULT_FAKEHUMAN_IDENTITY).trim() || DEFAULT_FAKEHUMAN_IDENTITY;
+        if (body.fakeHumanReplyStyle !== undefined) cfg.fakeHumanReplyStyle = String(body.fakeHumanReplyStyle || DEFAULT_FAKEHUMAN_REPLY_STYLE).trim() || DEFAULT_FAKEHUMAN_REPLY_STYLE;
+        if (body.fakeHumanReplyPrompt !== undefined) cfg.fakeHumanReplyPrompt = String(body.fakeHumanReplyPrompt || DEFAULT_FAKEHUMAN_REPLY_PROMPT).trim() || DEFAULT_FAKEHUMAN_REPLY_PROMPT;
+        if (body.fakeHumanPlannerPrompt !== undefined) cfg.fakeHumanPlannerPrompt = String(body.fakeHumanPlannerPrompt || DEFAULT_FAKEHUMAN_PLANNER_PROMPT).trim() || DEFAULT_FAKEHUMAN_PLANNER_PROMPT;
+        if (body.fakeHumanActionChoosePrompt !== undefined) cfg.fakeHumanActionChoosePrompt = String(body.fakeHumanActionChoosePrompt || DEFAULT_FAKEHUMAN_ACTION_CHOOSE_PROMPT).trim() || DEFAULT_FAKEHUMAN_ACTION_CHOOSE_PROMPT;
+        if (body.fakeHumanImageDescribePrompt !== undefined) cfg.fakeHumanImageDescribePrompt = String(body.fakeHumanImageDescribePrompt || DEFAULT_FAKEHUMAN_IMAGE_DESCRIBE_PROMPT).trim() || DEFAULT_FAKEHUMAN_IMAGE_DESCRIBE_PROMPT;
         if (body.fakeHumanMaxLength !== undefined) cfg.fakeHumanMaxLength = Math.max(10, Math.min(200, parseInt(body.fakeHumanMaxLength, 10) || 80));
         if (body.fakeHumanEnableGroups !== undefined) cfg.fakeHumanEnableGroups = Array.isArray(body.fakeHumanEnableGroups) ? body.fakeHumanEnableGroups.map(String).filter(Boolean) : [];
         if (body.fakeHumanContextLines !== undefined) cfg.fakeHumanContextLines = Math.max(1, Math.min(50, parseInt(body.fakeHumanContextLines, 10) || 5));
@@ -5065,6 +5211,9 @@ const plugin_init = async (ctxOrCore, _obContext, _actions, _instance) => {
           if (cfg.skillsEnabled) {
             systemContent += buildAgentSystemExtras(cfg, __dirname, text);
           }
+          if (cfg.agentToolsEnabled) {
+            systemContent += buildAgentFileSendBlock(cfg);
+          }
           const fileAttachBlock = buildWebAttachmentContextBlock(attachments.filter((a) => a.kind === 'file' && a.textSnippet));
           if (fileAttachBlock) systemContent += fileAttachBlock;
           const qqSession = {
@@ -5164,6 +5313,7 @@ const plugin_init = async (ctxOrCore, _obContext, _actions, _instance) => {
             });
             replyText = String(agentResult.content || '').trim();
             agentToolTrace = agentResult.toolTrace || [];
+            replyText = enrichReplyWithAgentFiles(replyText, agentToolTrace, text);
           } else {
             const result = await chatCompletion(messages, { usageKey: key, usageSource: 'chat' });
             if (result && typeof result === 'object') {
@@ -5822,6 +5972,9 @@ const plugin_onmessage = async (ctx, event) => {
   if (cfg.skillsEnabled) {
     systemContent += buildAgentSystemExtras(cfg, __dirname, userText);
   }
+  if (cfg.agentToolsEnabled) {
+    systemContent += buildAgentFileSendBlock(cfg);
+  }
 
   let resolvedGroupName = groupName;
   if (isGroup && groupId && !resolvedGroupName) {
@@ -5894,6 +6047,11 @@ const plugin_onmessage = async (ctx, event) => {
       });
       replyText = agentResult.content;
       agentToolTrace = agentResult.toolTrace || [];
+      const replyBeforeFiles = replyText;
+      replyText = enrichReplyWithAgentFiles(replyText, agentToolTrace, userText);
+      if (replyText !== replyBeforeFiles) {
+        log('info', 'Agent 回复已自动补全 QQ 文件发送标记', { userTextPreview: userText.slice(0, 40) }, 'chat');
+      }
     } else {
       const result = await chatCompletion(messages, { usageKey: key, usageSource: 'chat' });
       if (result && typeof result === 'object') {
@@ -5944,7 +6102,7 @@ const plugin_onmessage = async (ctx, event) => {
   if (userMessageId) await applyAfterReplyReaction(cfg, userMessageId);
 
   if (cfg.appendStickerAfterReply) {
-    const faceId = await pickStickerFaceId(cfg, userText, replyText);
+    const faceId = await pickStickerFaceId(cfg, userText, replyText, `用户：${String(userText || '').slice(0, 200)}\n机器人：${String(replyText || '').slice(0, 400)}`);
     if (faceId) {
       if (isGroup) await sendGroupFace(ctx, groupId, faceId);
       else await sendPrivateFace(ctx, userId, faceId);

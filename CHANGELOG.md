@@ -1,5 +1,25 @@
 # 更新日志
 
+## [2.8.1] — 2026-06-28
+
+### 新增
+
+- **伪人模块化提示词**：新增 `fakeHumanIdentity`、`fakeHumanReplyStyle`、`fakeHumanReplyPrompt`、`fakeHumanPlannerPrompt`、`fakeHumanActionChoosePrompt`、`fakeHumanImageDescribePrompt` 等配置项，支持通过模板变量精细定制伪人人格与回复风格。
+- **表情包视觉拼图选择**：新增 `pickStickerWithGridOrText` 方法，优先使用视觉模型对表情包拼图进行智能选取（MaiBot 风格），视觉失败时自动回退到文本编号选择；新增 `stickerSendNum`、`stickerSelectionPrompt`、`stickerUsageStats` 配置项。
+- **通用视觉对话接口**：新增 `callVisionChatRaw` 方法，支持多图输入与多端点故障转移，供表情选择、伪人图片描述等功能复用。
+- **伪人图片理解增强**：伪人回复时会先调用视觉模型对图片生成描述，再将描述注入上下文，取代原来仅凭图片 URL 插话的方式。
+
+### 改进
+
+- **伪人系统提示构建**：`buildFakeHumanSystemPrompt` 统一管理提示词渲染逻辑，支持 MaiBot 风格模板与旧版 `fakeHumanSystemPrompt` 兼容回退，并自动附加长度限制指令。
+- **表情候选信息补全**：`buildStickerCandidates` 现在携带 `preview` 和 `name` 字段，为视觉拼图选择提供必要的预览图数据。
+
+### 修复
+
+- **文件消息发送警告缺失**：`deliverChatReply` 中文件类型消息发送失败时，现在会输出包含路径信息的 `warn` 日志，便于排查路径不存在或文件超过 5MB 的问题。
+
+---
+
 ## [2.8.0] — 2026-06-28
 
 ### 新增
