@@ -1,28 +1,23 @@
 # 更新日志
 
-## [3.0.3] — 2026-06-28
+## [3.1.0] — 2026-06-28
+
+### 新增
+
+- **伪人复读跟发**：群内 ≥2 人连续发送相同文字时，伪人自动参与复读；通过 `fakeHumanRepeatEnabled`、`fakeHumanRepeatMinUsers`、`fakeHumanRepeatMaxLen` 配置触发条件。
+- **伪人斗图跟发**：群内 ≥2 人连续发表情/图片时，伪人自动跟发斗图，优先从已收录表情库中选取；通过 `fakeHumanStickerBattleEnabled`、`fakeHumanStickerBattleMinUsers` 配置。
+- **伪人拟人化行为**：新增随机回复风格（引用/插话/@）、随机概率错别字并撤回更正，通过 `fakeHumanHumanizeEnabled`、`fakeHumanTypoChance` 等参数细粒度控制。
+- **梗指北 txt 导入**：支持 `词条: 含义` 逐行格式、MaiBot 多段落词库、`.txt` 内嵌 OpenIE JSON 自动识别；Dashboard 大文件自动分批导入；库容量上限提升至 5000 条，失败时显示具体解析错误。
+- **表达方式库默认种子**：库为空时自动注入 MaiBot 风格默认表达，学习到的表达默认通过 AI 审核并参与伪人回复。
 
 ### 改进
 
-- **视觉模型采样温度**：将 `callVisionChatRaw` 中的 `temperature` 从 `0.6` 调整为 `1`，使视觉理解返回结果更具多样性。
+- **伪人表情发送**：`qq_face` 与 `emoji` 出站统一走 `buildFakeHumanFaceSegments`，优先匹配表情库已收录内容，兜底随机小黄脸；`fakeHumanQqFacePreferSticker` 控制优先级。
+- **表情库缩略图**：修复插件迁移后 `localPath` 失效问题，新增 webp 格式支持；VLM 识别出标签后自动标记「已认识」；二次「再次确认收录」自动归为己有。
 
 ### 修复
 
-- **`.gitignore` 补全**：新增 `.hmr-staging/`、`scripts/release.py`、`scripts/__pycache__/` 等条目，避免本地构建缓存和发布脚本意外提交至仓库。
-
----
-
-## [3.0.2] — 2026-06-28
-
-### 修复
-
-- **API 429 不切换备用端点**：对话 API 遇到 429 时原先提前 `return` 导致 failover 循环未继续执行；现改为 `throw` 并携带 `apiFailover` 标记，`chatCompletion` 层统一判断是否切换下一端点，并打「切换下一对话 API 端点」日志。
-
-### 改进
-
-- **视觉 API 支持对话池备用**：新增 `getEffectiveVisionFailoverSettings`，仅开启对话池 failover 时视觉请求也可按对话池配置轮转；`buildVisionEndpointList` 会将对话 API 池追加为视觉备用端点，并打「切换下一视觉 API 端点」日志。
-- **视觉对话失败重试增强**：`callVisionChatRaw` 和 `analyzeImageWithKimi` 统一接入 failover 重试逻辑，支持按 `retries` / `retryDelayMs` 配置多次重试，所有端点均失败时记录 `lastStatus`。
-- **`shouldRotateApiFailure` 防空保护**：`settings` 为空时直接返回 `false`，避免意外轮转。
+- **`sendGroupStructured` 返回值缺失**：现返回 `message_id`，供错别字撤回更正等后续操作使用。
 
 ---
 
@@ -37,8 +32,13 @@
 - **伪人选 action=1 不发消息**：Planner 在模型不支持 tool_calls 时空跑并静默跳过；现纯文本回退为 reply、首轮有出站即结束、记忆块不阻塞 Planner；Planner 支持 API 池 failover；异常时走 Replyer 兜底并记 warn 日志。
 - **Planner 有文字却只发表情**：模型把正文写在 content、工具却只调 send_qq_face 时，现补发 reply 文字并去掉同轮重复表情。
 - **API 429 不切换备用端点**：对话 API 遇 429 时提前 return 导致 failover 循环未执行；现改为 throw 并切换下一端点。伪人 Planner / 辅助 LLM 统一走 `chatCompletion` failover；视觉对话与图片分析在开启对话轮询时也会使用对话备用池，并打「切换下一端点」日志。
+- **梗指北 txt 导入**：格式为 `词条: 含义` 每行一条；Dashboard 大文件分批导入；OpenIE JSON 自动识别。
+- **表情库缩略图**：修复路径解析（插件迁移后 localPath 失效）、webp 支持；VLM 有标签后自动「已认识」；二次「再次确认收录」自动占为己有。
+- **表达方式库为空**：注入 MaiBot 风格默认表达种子；学习的表达默认 AI 通过并参与伪人回复。
+- **伪人拟人行为**：随机回复/插话（不引用）/@+空格/错别字撤回更正。
+- **伪人复读与斗图**：≥2 人连续相同文字自动复读；≥2 人连续发表情/图片自动跟发斗图（优先表情库已收录）。
 - **插件导入后 failed to load**：NapCat 新导入插件默认「已禁用」，需手动打开启用开关；新增启动时包完整性自检（缺 `lib/`、`webui/` 等会给出明确错误）。
-- **黑话导入失败**：插件未启用时 Dashboard 提示「请先启用聊天机器人」；TXT 去除 BOM；新增 `scripts/pack-plugin.mjs` 生成可正确导入的 zip。
+- **黑话导入失败**：插件未启用时 Dashboard 提示「请先启用聊天机器人」；TXT 去除 BOM；`.txt` 内嵌 OpenIE JSON 自动识别；支持 MaiBot 多段落词库（梗指北等）与 `词条 - 含义` 格式；库容量上限提至 5000 条；失败时展示具体解析错误。
 
 ---
 

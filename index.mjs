@@ -154,7 +154,13 @@ import {
   saveMaisakaStore
 } from './lib/maisaka/maisaka-fakehuman.mjs';
 import { expandBurstReplies, pickFakeHumanRandomText, shouldUseFakeHumanTextList, getEffectiveFakeHumanPickMode, buildFakeHumanReplyerInstruction } from './lib/maisaka/fakehuman-burst.mjs';
-import { resolveQqFaceId } from './lib/emoji/qq-face.mjs';
+import { pickFakeHumanSendStyle, maybeMakeTypo, sleepMs as fakeHumanSleepMs } from './lib/maisaka/fakehuman-humanize.mjs';
+import {
+  detectGroupRepeatTrend,
+  detectStickerBattleTrend,
+  botRecentlyTrended
+} from './lib/maisaka/fakehuman-trend.mjs';
+import { pickFakeHumanQqFaceId } from './lib/emoji/qq-face.mjs';
 import {
   captureAndRegisterEmoji,
   extractEmojiUrlsFromEvent,
@@ -179,6 +185,9 @@ import {
   findEmojiRecord,
   serializeEmojiItem,
   resolveEmojiStatus,
+  resolveEmojiLocalPath,
+  emojiMimeFromPath,
+  reinforceEmojiRecognition,
   EMOJI_STATUSES
 } from './lib/emoji/emoji-library.mjs';
 import {
@@ -191,7 +200,8 @@ import {
   deleteExpression,
   clearExpressions,
   getExpressionSettings,
-  findExpression
+  findExpression,
+  ensureDefaultExpressions
 } from './lib/maisaka/expression-library.mjs';
 import {
   listSlangs,
@@ -580,6 +590,21 @@ const DEFAULT_CONFIG = {
   fakeHumanFollowUpRounds: 2,
   fakeHumanFollowUpTimeoutMs: 120000,
   fakeHumanActionMode: 'reply',
+  fakeHumanRepeatEnabled: true,
+  fakeHumanRepeatMinUsers: 2,
+  fakeHumanRepeatMaxLen: 120,
+  fakeHumanStickerBattleEnabled: true,
+  fakeHumanStickerBattleMinUsers: 2,
+  fakeHumanTrendMinInterval: 12,
+  fakeHumanHumanizeEnabled: true,
+  fakeHumanTypoEnabled: true,
+  fakeHumanTypoChance: 0.14,
+  fakeHumanReplyStyleChance: 0.4,
+  fakeHumanAtMessageChance: 0.35,
+  fakeHumanInterjectChance: 0.35,
+  fakeHumanAtOnlyChance: 0.08,
+  fakeHumanQqFacePreferSticker: true,
+  fakeHumanQqFaceIds: ['13', '28', '22', '89', '5', '31', '76', '14', '3', '0'],
   autoUpdateEnabled: true,
   autoUpdateIntervalHours: 24,
   autoUpdateLastCheckAt: 0,
@@ -717,12 +742,16 @@ function getMaisakaStorePath(ctx) {
 
 function getMaisakaStore(ctx) {
   const p = sqliteDbRef ? getDbPath(getConfigDir(ctx)) : getMaisakaStorePath(ctx);
-  if (maisakaStoreCache && maisakaStorePathCache === p) return maisakaStoreCache;
+  if (maisakaStoreCache && maisakaStorePathCache === p) {
+    ensureDefaultExpressions(maisakaStoreCache);
+    return maisakaStoreCache;
+  }
   if (sqliteDbRef) {
     maisakaStoreCache = loadStoreFromDb(sqliteDbRef);
   } else {
     maisakaStoreCache = loadMaisakaStore(getMaisakaStorePath(ctx));
   }
+  ensureDefaultExpressions(maisakaStoreCache);
   maisakaStorePathCache = p;
   return maisakaStoreCache;
 }
@@ -740,9 +769,16 @@ function persistMaisakaStore(ctx) {
   }
 }
 
-function appendRecentGroupBotMessage(groupId, selfId, botName, text) {
+function appendRecentGroupBotMessage(groupId, selfId, botName, text, extra = {}) {
   const list = recentGroupMessages.get(String(groupId)) || [];
-  list.push({ userId: selfId || 'self', userName: botName || 'SELF', text: String(text || '').slice(0, 500), ts: Date.now() });
+  list.push({
+    userId: selfId || 'self',
+    userName: botName || 'SELF',
+    text: String(text || '').slice(0, 500),
+    kind: extra.kind || 'text',
+    trendSource: extra.trendSource || '',
+    ts: Date.now()
+  });
   recordObserveChat(String(groupId), {
     userId: selfId || 'self',
     userName: botName || 'SELF',
@@ -1117,6 +1153,21 @@ function saveConfig(ctx) {
 function extractPlainText(raw) {
   if (!raw || typeof raw !== 'string') return '';
   return raw.replace(/\[CQ:[^\]]+\]/g, '').replace(/\s+/g, ' ').trim();
+}
+
+/** 群消息类型：text / image / sticker / file */
+function classifyIncomingGroupMessageKind(event, hasImages, hasFiles) {
+  if (hasImages) return 'image';
+  if (hasFiles) return 'file';
+  const msg = event?.message;
+  if (Array.isArray(msg)) {
+    for (const seg of msg) {
+      const t = String(seg?.type || '').toLowerCase();
+      if (/^(face|mface|bface|sface|marketface|emoji)$/.test(t)) return 'sticker';
+    }
+  }
+  if (/\[CQ:(face|mface|bface|sface|marketface)/i.test(String(event?.raw_message || ''))) return 'sticker';
+  return 'text';
 }
 
 /** 提取消息 segment 摘要，便于日志排查表情/图片等结构 */
@@ -3642,16 +3693,30 @@ async function sendGroup(ctx, groupId, message) {
   }
 }
 
-/** 发送结构化群消息（正确渲染 @/face/image） */
+/** 发送结构化群消息（正确渲染 @/face/image）；返回 message_id */
 async function sendGroupStructured(ctx, groupId, replyMessageId, segments) {
   try {
     const message = [];
     if (replyMessageId != null) message.push({ type: 'reply', data: { id: String(replyMessageId) } });
     message.push(...flattenMessageSegments(segments));
-    if (!message.length) return;
-    await callAction('send_group_msg', { group_id: String(groupId), message });
+    if (!message.length) return null;
+    const ret = await callAction('send_group_msg', { group_id: String(groupId), message });
+    const mid = ret?.data?.message_id ?? ret?.message_id ?? ret?.data?.messageId;
+    return mid != null ? mid : null;
   } catch (e) {
     pluginState.logger?.warn?.('[chat-bot] 发送群结构化消息失败: ' + e.message);
+    return null;
+  }
+}
+
+async function recallGroupMessage(ctx, messageId) {
+  if (messageId == null) return false;
+  try {
+    await callAction('delete_msg', { message_id: String(messageId) });
+    return true;
+  } catch (e) {
+    log('warn', '撤回消息失败', { messageId, err: e.message });
+    return false;
   }
 }
 
@@ -3990,6 +4055,27 @@ function isFaceIdUrl(faceId) {
   return false;
 }
 
+/** 伪人出站：优先表情库，否则从 QQ 小黄脸池随机选取 */
+async function buildFakeHumanFaceSegments(cfg, store, { emotion = '', faceIdRaw = '', plainText = '', recentContext = '' }) {
+  const ctx = plainText || recentContext || '';
+  if (cfg.fakeHumanQqFacePreferSticker !== false && store) {
+    const pick = await pickRegisteredEmojiWithGrid({
+      store,
+      cfg,
+      userText: ctx,
+      replyText: emotion || '',
+      contextLines: recentContext,
+      callVisionChat: (opts) => callVisionChatRaw({ ...opts, model: getChatVisionModel(cfg) })
+    });
+    let fid = pick?.id || (await pickStickerFaceId(cfg, ctx, emotion || '', recentContext, store));
+    if (fid) {
+      return [{ type: isFaceIdUrl(fid) ? 'image' : 'face', data: isFaceIdUrl(fid) ? { file: fid } : { id: String(fid) } }];
+    }
+  }
+  const qqId = pickFakeHumanQqFaceId(cfg, emotion, faceIdRaw, ctx);
+  return [{ type: 'face', data: { id: String(qqId) } }];
+}
+
 /** 发送群聊表情（支持数字 face id 或 URL；URL 时以图片形式发送） */
 async function sendGroupFace(ctx, groupId, faceId) {
   try {
@@ -4078,6 +4164,10 @@ async function aiChooseFakeHumanAction(recentContext) {
 
 function getEmojiCacheDir(ctx) {
   return path.join(path.dirname(getMaisakaStorePath(ctx)), 'emoji-cache');
+}
+
+function emojiLibSerializeOpts(ctx) {
+  return { imageBase: 'emoji-library/image', cacheDir: getEmojiCacheDir(ctx) };
 }
 
 /** 伪人 LLM tool_calls 调用（支持 API 池 failover；不支持 tools 时回退纯文本） */
@@ -4245,38 +4335,35 @@ async function deliverFakeHumanOutbound(ctx, groupId, replyMsgId, outbound, { cf
     const rid = first ? replyMsgId : null;
     first = false;
     if (ob.type === 'reply' && ob.message) {
-      await deliverFakeHumanMessage(ctx, groupId, rid, { atUserId: ob.atUserId || '', message: ob.message });
+      await deliverFakeHumanMessage(ctx, groupId, rid, { atUserId: ob.atUserId || '', message: ob.message, defaultAtUserId: userId }, cfg);
       sentCount += 1;
     } else if (ob.type === 'at' && ob.atUserId) {
-      await deliverFakeHumanMessage(ctx, groupId, rid, { atUserId: ob.atUserId, message: '' });
+      await deliverFakeHumanMessage(ctx, groupId, rid, { atUserId: ob.atUserId, message: '', defaultAtUserId: userId }, cfg);
       sentCount += 1;
     } else if (ob.type === 'poke' && ob.userId) {
       await sendGroupPoke(ctx, groupId, ob.userId);
       sentCount += 1;
     } else if (ob.type === 'qq_face') {
-      const faceId = resolveQqFaceId(ob.faceId || ob.emotion || '微笑');
-      await deliverFakeHumanMessage(ctx, groupId, rid, {
-        messageArray: [{ type: 'face', data: { id: String(faceId) } }]
+      const arr = await buildFakeHumanFaceSegments(cfg, store, {
+        emotion: ob.emotion || '',
+        faceIdRaw: ob.faceId || '',
+        plainText,
+        recentContext
       });
+      await deliverFakeHumanMessage(ctx, groupId, rid, { messageArray: arr, defaultAtUserId: userId }, cfg);
       sentCount += 1;
     } else if (ob.type === 'file' && ob.path) {
-      if (ob.caption) await deliverFakeHumanMessage(ctx, groupId, rid, { message: ob.caption });
+      await deliverFakeHumanMessage(ctx, groupId, rid, { message: ob.caption, defaultAtUserId: userId }, cfg);
       await deliverChatReply(ctx, { isGroup: true, groupId, userId, prefix: '', replyText: `[发送文件:${ob.path}]` });
       sentCount += 1;
     } else if (ob.type === 'emoji') {
-      const pick = await pickRegisteredEmojiWithGrid({
-        store,
-        cfg,
-        userText: plainText || recentContext,
-        replyText: ob.emotion || '',
-        contextLines: recentContext,
-        callVisionChat: (opts) => callVisionChatRaw({ ...opts, model: getChatVisionModel(cfg) })
+      const arr = await buildFakeHumanFaceSegments(cfg, store, {
+        emotion: ob.emotion || '',
+        faceIdRaw: '',
+        plainText,
+        recentContext
       });
-      let faceId = pick?.id || (await pickStickerFaceId(cfg, plainText, ob.emotion || '', recentContext, store));
-      const qqId = resolveQqFaceId(ob.emotion || '微笑');
-      if (!faceId) faceId = String(qqId);
-      const arr = [{ type: isFaceIdUrl(faceId) ? 'image' : 'face', data: isFaceIdUrl(faceId) ? { file: faceId } : { id: String(faceId) } }];
-      await deliverFakeHumanMessage(ctx, groupId, rid, { messageArray: arr });
+      await deliverFakeHumanMessage(ctx, groupId, rid, { messageArray: arr, defaultAtUserId: userId }, cfg);
       sentCount += 1;
     }
   }
@@ -4339,16 +4426,109 @@ async function resolveFakeHumanFallbackMessage(cfg, pickMode, aiContext) {
 }
 
 /** 发送伪人消息（@ 使用 segment，不再裸发 CQ 字符串） */
-async function deliverFakeHumanMessage(ctx, groupId, replyMsgId, { atUserId, message, messageArray }) {
+async function deliverFakeHumanMessage(ctx, groupId, replyMsgId, { atUserId, message, messageArray, defaultAtUserId }, cfg = pluginState.config) {
+  const style = cfg?.fakeHumanHumanizeEnabled === false ? 'reply' : pickFakeHumanSendStyle(cfg);
+  let useReplyId = replyMsgId;
+  let uid = atUserId || '';
+  let text = message || '';
+
+  if (style === 'interject') useReplyId = null;
+  if (style === 'at_only') {
+    uid = uid || defaultAtUserId || '';
+    text = '';
+  }
+  if (style === 'at_message' && !uid) uid = defaultAtUserId || '';
+
+  if (text && !messageArray?.length && cfg?.fakeHumanTypoEnabled !== false) {
+    const typo = maybeMakeTypo(text, cfg);
+    if (typo) {
+      const badSegments = [
+        ...(uid ? buildAtSegments(uid, '') : []),
+        ...parseCqTextToSegments(typo.typo)
+      ];
+      const badId = await sendGroupStructured(ctx, groupId, useReplyId, badSegments);
+      await fakeHumanSleepMs(600 + Math.floor(Math.random() * 1200));
+      if (badId) await recallGroupMessage(ctx, badId);
+      text = typo.correct;
+      useReplyId = style === 'interject' ? null : replyMsgId;
+    }
+  }
+
   const segments = [];
-  if (atUserId) segments.push(...buildAtSegments(atUserId, ''));
+  if (uid) segments.push(...buildAtSegments(uid, text ? ' ' : ''));
   if (messageArray?.length) {
     segments.push(...messageArray);
-  } else if (message) {
-    segments.push(...parseCqTextToSegments(message));
+  } else if (text) {
+    segments.push(...parseCqTextToSegments(text));
   }
   if (!segments.length) return;
-  await sendGroupStructured(ctx, groupId, replyMsgId, segments);
+  await sendGroupStructured(ctx, groupId, useReplyId, segments);
+}
+
+/** 伪人：群聊复读 / 斗图趋势（高优先级，绕过随机概率） */
+async function tryFakeHumanGroupTrend(ctx, event, groupId, userId, plainText, cfg) {
+  const g = String(groupId);
+  const selfId = event.self_id != null ? String(event.self_id) : null;
+  const botName = (cfg.fakeHumanBotName || cfg.botDisplayName || '机器人').trim();
+  const rawList = recentGroupMessages.get(g) || [];
+  const now = Date.now();
+  const trendInterval = Math.max(5, Number(cfg.fakeHumanTrendMinInterval) ?? 12) * 1000;
+  if (now - (fakeHumanLastTime.get(g) || 0) < trendInterval) return false;
+
+  if (cfg.fakeHumanRepeatEnabled !== false) {
+    const minUsers = Math.max(2, Number(cfg.fakeHumanRepeatMinUsers) || 2);
+    const repeat = detectGroupRepeatTrend(rawList, selfId, {
+      minUsers,
+      minSame: minUsers,
+      maxLen: Number(cfg.fakeHumanRepeatMaxLen) || 120
+    });
+    if (repeat && !botRecentlyTrended(rawList, selfId, 'repeat')) {
+      await fakeHumanSleepMs(400 + Math.floor(Math.random() * 1200));
+      await deliverFakeHumanMessage(ctx, groupId, null, {
+        message: repeat.text,
+        defaultAtUserId: userId
+      }, { ...cfg, fakeHumanTypoEnabled: false });
+      appendRecentGroupBotMessage(g, selfId, botName, repeat.text, { kind: 'text', trendSource: 'repeat' });
+      fakeHumanLastTime.set(g, now);
+      log('info', '伪人复读', { groupId: g, text: repeat.text.slice(0, 40), users: repeat.userCount, chain: repeat.count });
+      return true;
+    }
+  }
+
+  if (cfg.fakeHumanStickerBattleEnabled !== false) {
+    const minUsers = Math.max(2, Number(cfg.fakeHumanStickerBattleMinUsers) || 2);
+    const battle = detectStickerBattleTrend(rawList, selfId, { minUsers, minCount: minUsers });
+    if (battle && !botRecentlyTrended(rawList, selfId, 'sticker_battle')) {
+      const store = getMaisakaStore(ctx);
+      let faceId = null;
+      const owned = getRegisteredEmojis(store, '斗图', plainText || '');
+      if (owned.length) {
+        faceId = owned[Math.floor(Math.random() * Math.min(owned.length, 8))].localPath;
+      }
+      if (!faceId) {
+        faceId = await pickStickerFaceId(cfg, plainText || '[斗图]', '斗图', getFormattedRecentGroupContext(g, 5, cfg), store);
+      }
+      await fakeHumanSleepMs(300 + Math.floor(Math.random() * 1500));
+      if (faceId) {
+        const arr = [{ type: isFaceIdUrl(faceId) ? 'image' : 'face', data: isFaceIdUrl(faceId) ? { file: faceId } : { id: String(faceId) } }];
+        await deliverFakeHumanMessage(ctx, groupId, null, { messageArray: arr, defaultAtUserId: userId }, cfg);
+        appendRecentGroupBotMessage(g, selfId, botName, '[表情]', { kind: 'sticker', trendSource: 'sticker_battle' });
+      } else {
+        const moods = ['无语', '哈哈', '微笑', 'OK', '开心', '呆'];
+        const mood = moods[Math.floor(Math.random() * moods.length)];
+        const qqId = pickFakeHumanQqFaceId(cfg, mood, '', plainText || recentContext);
+        await deliverFakeHumanMessage(ctx, groupId, null, {
+          messageArray: [{ type: 'face', data: { id: String(qqId) } }],
+          defaultAtUserId: userId
+        }, cfg);
+        appendRecentGroupBotMessage(g, selfId, botName, '[小黄脸]', { kind: 'sticker', trendSource: 'sticker_battle' });
+      }
+      fakeHumanLastTime.set(g, now);
+      log('info', '伪人斗图', { groupId: g, users: battle.userCount, chain: battle.count });
+      return true;
+    }
+  }
+  return false;
 }
 
 /** 伪人：MaiBot 风格 Planner+Reply / 表达/黑话/行为学习 / 长期记忆 */
@@ -4357,6 +4537,8 @@ async function tryFakeHumanReply(ctx, event, groupId, userId, plainText) {
   if (!cfg.fakeHumanEnabled) return;
   const g = String(groupId);
   if (!shouldHandleGroupForFakeHuman(g)) return;
+
+  if (await tryFakeHumanGroupTrend(ctx, event, groupId, userId, plainText, cfg)) return;
 
   const now = Date.now();
   const followUpTimeout = Math.max(30000, Number(cfg.fakeHumanFollowUpTimeoutMs) ?? 120000);
@@ -4509,7 +4691,7 @@ async function tryFakeHumanReply(ctx, event, groupId, userId, plainText) {
         return;
       }
       const replyMsgId = event.message_id ?? event.message?.id ?? null;
-      await deliverFakeHumanMessage(ctx, groupId, replyMsgId, { message: fallbackMsg });
+      await deliverFakeHumanMessage(ctx, groupId, replyMsgId, { message: fallbackMsg, defaultAtUserId: userId }, cfg);
       appendRecentGroupBotMessage(g, selfId, botName, fallbackMsg);
       log('info', '伪人插话', { groupId: g, mode: shouldUseFakeHumanTextList(cfg, pickMode) ? 'random_text' : 'ai_fallback', reason: 'planner_skip' });
       return;
@@ -4533,7 +4715,7 @@ async function tryFakeHumanReply(ctx, event, groupId, userId, plainText) {
           log('warn', '伪人跳过发言', { groupId: g, reason: 'outbound_empty', mode: pickMode });
           return;
         }
-        await deliverFakeHumanMessage(ctx, groupId, replyMsgId, { message: fallbackMsg });
+        await deliverFakeHumanMessage(ctx, groupId, replyMsgId, { message: fallbackMsg, defaultAtUserId: userId }, cfg);
         appendRecentGroupBotMessage(g, selfId, botName, fallbackMsg);
         log('info', '伪人插话', { groupId: g, mode: shouldUseFakeHumanTextList(cfg, pickMode) ? 'random_text' : 'ai_fallback', reason: 'outbound_empty' });
         return;
@@ -4562,9 +4744,14 @@ async function tryFakeHumanReply(ctx, event, groupId, userId, plainText) {
       }) || '';
     }
   } else if (pickMode === 'sticker') {
-    const faceId = await pickStickerFaceId(cfg, plainText || recentContext, '', recentContext, store);
-    if (faceId) {
-      messageArray = [{ type: isFaceIdUrl(faceId) ? 'image' : 'face', data: isFaceIdUrl(faceId) ? { file: faceId } : { id: String(faceId) } }];
+    const arr = await buildFakeHumanFaceSegments(cfg, store, {
+      emotion: '',
+      faceIdRaw: '',
+      plainText: plainText || recentContext,
+      recentContext
+    });
+    if (arr?.length) {
+      messageArray = arr;
       sendAsArray = true;
     } else {
       const emojiList = cfg.fakeHumanEmojiList || DEFAULT_CONFIG.fakeHumanEmojiList;
@@ -4629,9 +4816,9 @@ async function tryFakeHumanReply(ctx, event, groupId, userId, plainText) {
 
   const replyMsgId = event.message_id ?? event.message?.id ?? null;
   if (sendAsArray && messageArray) {
-    await deliverFakeHumanMessage(ctx, groupId, replyMsgId, { atUserId, messageArray });
+    await deliverFakeHumanMessage(ctx, groupId, replyMsgId, { atUserId, messageArray, defaultAtUserId: userId }, cfg);
   } else if (message) {
-    await deliverFakeHumanMessage(ctx, groupId, replyMsgId, { atUserId, message });
+    await deliverFakeHumanMessage(ctx, groupId, replyMsgId, { atUserId, message, defaultAtUserId: userId }, cfg);
   } else {
     log('warn', '伪人跳过发言', { groupId: g, mode: useMaisaka ? 'maisaka' : pickMode, reason: 'empty_message' });
     return;
@@ -5616,6 +5803,25 @@ const plugin_init = async (ctxOrCore, _obContext, _actions, _instance) => {
         if (body.fakeHumanFollowUpRounds !== undefined) cfg.fakeHumanFollowUpRounds = Math.max(0, Math.min(10, parseInt(body.fakeHumanFollowUpRounds, 10) ?? 2));
         if (body.fakeHumanFollowUpTimeoutMs !== undefined) cfg.fakeHumanFollowUpTimeoutMs = Math.max(10000, parseInt(body.fakeHumanFollowUpTimeoutMs, 10) || 120000);
         if (body.fakeHumanActionMode !== undefined) cfg.fakeHumanActionMode = ['reply', 'at', 'poke', 'ai_choose'].includes(String(body.fakeHumanActionMode).toLowerCase()) ? String(body.fakeHumanActionMode).toLowerCase() : 'reply';
+        if (body.fakeHumanRepeatEnabled !== undefined) cfg.fakeHumanRepeatEnabled = Boolean(body.fakeHumanRepeatEnabled);
+        if (body.fakeHumanRepeatMinUsers !== undefined) cfg.fakeHumanRepeatMinUsers = Math.max(2, parseInt(body.fakeHumanRepeatMinUsers, 10) || 2);
+        if (body.fakeHumanRepeatMaxLen !== undefined) cfg.fakeHumanRepeatMaxLen = Math.max(1, parseInt(body.fakeHumanRepeatMaxLen, 10) || 120);
+        if (body.fakeHumanStickerBattleEnabled !== undefined) cfg.fakeHumanStickerBattleEnabled = Boolean(body.fakeHumanStickerBattleEnabled);
+        if (body.fakeHumanStickerBattleMinUsers !== undefined) cfg.fakeHumanStickerBattleMinUsers = Math.max(2, parseInt(body.fakeHumanStickerBattleMinUsers, 10) || 2);
+        if (body.fakeHumanTrendMinInterval !== undefined) cfg.fakeHumanTrendMinInterval = Math.max(5, parseInt(body.fakeHumanTrendMinInterval, 10) || 12);
+        if (body.fakeHumanHumanizeEnabled !== undefined) cfg.fakeHumanHumanizeEnabled = Boolean(body.fakeHumanHumanizeEnabled);
+        if (body.fakeHumanTypoEnabled !== undefined) cfg.fakeHumanTypoEnabled = Boolean(body.fakeHumanTypoEnabled);
+        if (body.fakeHumanTypoChance !== undefined) cfg.fakeHumanTypoChance = Math.max(0, Math.min(1, parseFloat(body.fakeHumanTypoChance) ?? 0.14));
+        if (body.fakeHumanReplyStyleChance !== undefined) cfg.fakeHumanReplyStyleChance = Math.max(0, Math.min(1, parseFloat(body.fakeHumanReplyStyleChance) ?? 0.4));
+        if (body.fakeHumanAtMessageChance !== undefined) cfg.fakeHumanAtMessageChance = Math.max(0, Math.min(1, parseFloat(body.fakeHumanAtMessageChance) ?? 0.35));
+        if (body.fakeHumanInterjectChance !== undefined) cfg.fakeHumanInterjectChance = Math.max(0, Math.min(1, parseFloat(body.fakeHumanInterjectChance) ?? 0.35));
+        if (body.fakeHumanAtOnlyChance !== undefined) cfg.fakeHumanAtOnlyChance = Math.max(0, Math.min(1, parseFloat(body.fakeHumanAtOnlyChance) ?? 0.08));
+        if (body.fakeHumanQqFacePreferSticker !== undefined) cfg.fakeHumanQqFacePreferSticker = Boolean(body.fakeHumanQqFacePreferSticker);
+        if (body.fakeHumanQqFaceIds !== undefined) {
+          cfg.fakeHumanQqFaceIds = Array.isArray(body.fakeHumanQqFaceIds)
+            ? body.fakeHumanQqFaceIds.map(String).map((s) => s.trim()).filter((x) => /^\d+$/.test(x))
+            : String(body.fakeHumanQqFaceIds || '').split(/[\n,，\s]+/).map((s) => s.trim()).filter((x) => /^\d+$/.test(x));
+        }
         if (body.autoUpdateEnabled !== undefined) cfg.autoUpdateEnabled = bool('autoUpdateEnabled', true);
         if (body.autoUpdateIntervalHours !== undefined) cfg.autoUpdateIntervalHours = num('autoUpdateIntervalHours', 24, 1, 168);
         if (body.autoUpdateLastCheckAt !== undefined) cfg.autoUpdateLastCheckAt = num('autoUpdateLastCheckAt', 0, 0, Number.MAX_SAFE_INTEGER);
@@ -5791,13 +5997,17 @@ const plugin_init = async (ctxOrCore, _obContext, _actions, _instance) => {
         try {
           const rtCtx = pluginState.runtimeCtx || ctx;
           const store = getMaisakaStore(rtCtx);
+          const cacheDir = getEmojiCacheDir(rtCtx);
           const rec = findEmojiRecord(store, decodeURIComponent(req.params.id || ''));
-          if (!rec?.localPath || !fs.existsSync(rec.localPath)) return res.status(404).end();
-          const ext = path.extname(rec.localPath).toLowerCase();
-          const mime = ext === '.png' ? 'image/png' : ext === '.gif' ? 'image/gif' : 'image/jpeg';
-          res.setHeader('Content-Type', mime);
+          const localPath = resolveEmojiLocalPath(rec, cacheDir);
+          if (!localPath) return res.status(404).end();
+          if (rec && rec.localPath !== localPath) {
+            rec.localPath = localPath;
+            persistMaisakaStore(rtCtx);
+          }
+          res.setHeader('Content-Type', emojiMimeFromPath(localPath));
           res.setHeader('Cache-Control', 'public, max-age=86400');
-          fs.createReadStream(rec.localPath).pipe(res);
+          fs.createReadStream(localPath).pipe(res);
         } catch {
           res.status(500).end();
         }
@@ -5810,14 +6020,14 @@ const plugin_init = async (ctxOrCore, _obContext, _actions, _instance) => {
           ensureEmojiRegistry(store);
           const fixed = normalizeEmojiRegistry(store);
           if (fixed > 0) persistMaisakaStore(rtCtx);
-          const imageBase = 'emoji-library/image';
+          const serOpts = emojiLibSerializeOpts(rtCtx);
           const result = listEmojiLibrary(store, {
             status: req.query?.status || 'all',
             groupId: req.query?.groupId || req.query?.group_id || '',
             q: req.query?.q || '',
             limit: parseInt(req.query?.limit, 10) || 50,
             offset: parseInt(req.query?.offset, 10) || 0,
-            imageBase
+            ...serOpts
           });
           res.json({
             success: true,
@@ -5841,7 +6051,22 @@ const plugin_init = async (ctxOrCore, _obContext, _actions, _instance) => {
           const rec = updateEmojiStatus(store, id, status);
           if (!rec) return res.json({ success: false, error: 'not_found' });
           persistMaisakaStore(rtCtx);
-          res.json({ success: true, emoji: serializeEmojiItem(store, rec, { imageBase: 'emoji-library/image' }) });
+          const serOpts = emojiLibSerializeOpts(rtCtx);
+          res.json({ success: true, emoji: serializeEmojiItem(store, rec, serOpts) });
+        } catch (e) {
+          res.json({ success: false, error: e.message || String(e) });
+        }
+      });
+
+      router.postNoAuth('/emoji-library/reinforce', (req, res) => {
+        try {
+          const rtCtx = pluginState.runtimeCtx || ctx;
+          const store = getMaisakaStore(rtCtx);
+          const id = String(req.body?.id || req.body?.hash || '').trim();
+          const rec = reinforceEmojiRecognition(store, id);
+          if (!rec) return res.json({ success: false, error: 'not_found' });
+          persistMaisakaStore(rtCtx);
+          res.json({ success: true, emoji: serializeEmojiItem(store, rec, emojiLibSerializeOpts(rtCtx)) });
         } catch (e) {
           res.json({ success: false, error: e.message || String(e) });
         }
@@ -6128,14 +6353,22 @@ const plugin_init = async (ctxOrCore, _obContext, _actions, _instance) => {
         try {
           const rtCtx = pluginState.runtimeCtx || ctx;
           const store = getMaisakaStore(rtCtx);
+          const groupId = String(req.body?.groupId || req.body?.group_id || '').trim();
+          const skipDuplicate = req.body?.skipDuplicate !== false;
+
+          if (Array.isArray(req.body?.items) && req.body.items.length) {
+            const result = importSlangs(store, req.body.items, { groupId, skipDuplicate });
+            persistMaisakaStore(rtCtx);
+            return res.json({ success: true, ...result, batched: true });
+          }
+
           const raw = String(req.body?.content || req.body?.text || '').trim();
           const format = String(req.body?.format || 'auto').trim();
-          const groupId = String(req.body?.groupId || req.body?.group_id || '').trim();
           const parsed = parseSlangImport(raw, format);
           if (!parsed.items.length) {
             return res.json({ success: false, error: parsed.errors.join('；') || '未解析到词条', errors: parsed.errors });
           }
-          const result = importSlangs(store, parsed.items, { groupId, skipDuplicate: req.body?.skipDuplicate !== false });
+          const result = importSlangs(store, parsed.items, { groupId, skipDuplicate });
           persistMaisakaStore(rtCtx);
           res.json({
             success: true,
@@ -7619,8 +7852,9 @@ const plugin_onmessage = async (ctx, event) => {
   if (isGroup && (plainText.length > 0 || hasImages || hasFiles) && (!selfId || userId !== selfId)) {
     const senderName = event.sender?.card || event.sender?.nickname || event.sender?.nick || '';
     const list = recentGroupMessages.get(String(groupId)) || [];
-    const msgText = plainText.length > 0 ? plainText.slice(0, 500) : (hasImages ? '[图片]' : (hasFiles ? '[文件]' : ''));
-    list.push({ userId, userName: senderName, text: msgText, ts: Date.now() });
+    const msgKind = classifyIncomingGroupMessageKind(event, hasImages, hasFiles);
+    const msgText = plainText.length > 0 ? plainText.slice(0, 500) : (msgKind === 'sticker' ? '[表情]' : (hasImages ? '[图片]' : (hasFiles ? '[文件]' : '')));
+    list.push({ userId, userName: senderName, text: msgText, kind: msgKind, ts: Date.now() });
     recordObserveChat(groupId, { userId, userName: senderName, text: msgText, ts: Date.now() });
     const cfgLines = pluginState.config || {};
     const maxLines = Math.max(5, Math.min(50, Math.max(
@@ -7686,7 +7920,7 @@ const plugin_onmessage = async (ctx, event) => {
       const drew = await drawBotEngine.handleDrawMessage(ctx, cfg, event, groupId, userId, plainText);
       if (drew) return;
     }
-    if (isGroup && cfg.fakeHumanEnabled && (plainText.length > 0 || hasImages)) {
+    if (isGroup && cfg.fakeHumanEnabled && (plainText.length > 0 || hasImages || classifyIncomingGroupMessageKind(event, hasImages, hasFiles) !== 'text')) {
       await tryFakeHumanReply(ctx, event, groupId, userId, plainText);
     }
     return;

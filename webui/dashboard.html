@@ -4728,7 +4728,7 @@ npx playwright install chromium</pre>
         </div>
         <div class="sidebar-brand-text">
           <h1>Chat Bot</h1>
-          <span id="sidebar-version">NapCat 插件 · v3.0.3</span>
+          <span id="sidebar-version">NapCat 插件 · v3.1.0</span>
         </div>
       </div>
       <nav class="sidebar-nav">
@@ -6665,8 +6665,77 @@ npx playwright install chromium</pre>
             <textarea class="ipt" id="cfg-fakeHumanGroupChance" placeholder="123456:0.1&#10;789012:0.02" style="display:none"></textarea>
           </div>
           <div class="form-row">
-            <div class="form-label">最小间隔（秒）<div class="hint">同一群两次插话至少间隔秒数，避免刷屏</div></div>
+            <div class="form-label">最小间隔（秒）<div class="hint">同一群两次普通插话至少间隔秒数（默认 90 秒）</div></div>
             <input type="number" class="ipt" id="cfg-fakeHumanMinInterval" min="0" max="3600" value="90" style="max-width:100px" />
+          </div>
+        </div>
+        <div class="section">
+          <div class="section-title">复读 / 斗图</div>
+          <div class="form-row">
+            <div class="form-label">启用复读<div class="hint">≥N 人连续发送相同文字时，机器人跟复读</div></div>
+            <div class="tgl on" id="tgl-fakeHumanRepeatEnabled" onclick="toggle(this,'fakeHumanRepeatEnabled')"></div>
+          </div>
+          <div class="form-row">
+            <div class="form-label">复读最少人数<div class="hint">至少几人跟发相同内容才触发（默认 2）</div></div>
+            <input type="number" class="ipt" id="cfg-fakeHumanRepeatMinUsers" min="2" max="20" value="2" style="max-width:80px" />
+          </div>
+          <div class="form-row">
+            <div class="form-label">复读最大字数<div class="hint">超过该长度的相同文字不跟复读（默认 120）</div></div>
+            <input type="number" class="ipt" id="cfg-fakeHumanRepeatMaxLen" min="1" max="500" value="120" style="max-width:100px" />
+          </div>
+          <div class="form-row">
+            <div class="form-label">启用斗图<div class="hint">≥N 人连续发表情/图片时，机器人跟发（优先已收录表情）</div></div>
+            <div class="tgl on" id="tgl-fakeHumanStickerBattleEnabled" onclick="toggle(this,'fakeHumanStickerBattleEnabled')"></div>
+          </div>
+          <div class="form-row">
+            <div class="form-label">斗图最少人数<div class="hint">至少几人连续发表情才触发（默认 2）</div></div>
+            <input type="number" class="ipt" id="cfg-fakeHumanStickerBattleMinUsers" min="2" max="20" value="2" style="max-width:80px" />
+          </div>
+          <div class="form-row">
+            <div class="form-label">趋势触发间隔（秒）<div class="hint">复读/斗图两次触发之间的最短间隔（默认 12 秒，比普通插话更短）</div></div>
+            <input type="number" class="ipt" id="cfg-fakeHumanTrendMinInterval" min="5" max="600" value="12" style="max-width:100px" />
+          </div>
+        </div>
+        <div class="section">
+          <div class="section-title">拟人化发送</div>
+          <div class="form-row">
+            <div class="form-label">启用拟人化<div class="hint">随机选择：回复引用 / @+文字 / 插话不引用 / 仅@</div></div>
+            <div class="tgl on" id="tgl-fakeHumanHumanizeEnabled" onclick="toggle(this,'fakeHumanHumanizeEnabled')"></div>
+          </div>
+          <div class="form-row">
+            <div class="form-label">回复引用权重<div class="hint">0–1，四种风格权重之和不必为 1</div></div>
+            <input type="number" class="ipt" id="cfg-fakeHumanReplyStyleChance" min="0" max="1" step="0.05" value="0.4" style="max-width:100px" />
+          </div>
+          <div class="form-row">
+            <div class="form-label">@+文字 权重</div>
+            <input type="number" class="ipt" id="cfg-fakeHumanAtMessageChance" min="0" max="1" step="0.05" value="0.35" style="max-width:100px" />
+          </div>
+          <div class="form-row">
+            <div class="form-label">插话（不引用）权重</div>
+            <input type="number" class="ipt" id="cfg-fakeHumanInterjectChance" min="0" max="1" step="0.05" value="0.35" style="max-width:100px" />
+          </div>
+          <div class="form-row">
+            <div class="form-label">仅@ 权重</div>
+            <input type="number" class="ipt" id="cfg-fakeHumanAtOnlyChance" min="0" max="1" step="0.05" value="0.08" style="max-width:100px" />
+          </div>
+          <div class="form-row">
+            <div class="form-label">错别字撤回<div class="hint">偶尔发错字后撤回并重发正确内容</div></div>
+            <div class="tgl on" id="tgl-fakeHumanTypoEnabled" onclick="toggle(this,'fakeHumanTypoEnabled')"></div>
+          </div>
+          <div class="form-row">
+            <div class="form-label">错别字概率 (0–1)<div class="hint">每条文字消息触发错字的概率（默认 0.14）</div></div>
+            <input type="number" class="ipt" id="cfg-fakeHumanTypoChance" min="0" max="1" step="0.01" value="0.14" style="max-width:100px" />
+          </div>
+        </div>
+        <div class="section">
+          <div class="section-title">小黄脸 / 表情</div>
+          <div class="form-row">
+            <div class="form-label">优先表情库<div class="hint">发 QQ 小黄脸前先尝试从已收录表情库选取</div></div>
+            <div class="tgl on" id="tgl-fakeHumanQqFacePreferSticker" onclick="toggle(this,'fakeHumanQqFacePreferSticker')"></div>
+          </div>
+          <div class="form-row">
+            <div class="form-label">小黄脸 ID 池<div class="hint">未指定情绪时从此池随机选取，逗号或换行分隔。如 13,28,22,89,5,31,76,14,3,0</div></div>
+            <textarea class="ipt" id="cfg-fakeHumanQqFaceIds" rows="2" placeholder="13,28,22,89,5,31,76,14,3,0" style="max-width:360px"></textarea>
           </div>
           <div class="form-row">
             <div class="form-label">捕获最近几条群消息<div class="hint">伪人 AI 会看到最近 N 条群聊内容作为上下文，建议 5–15</div></div>
@@ -7853,6 +7922,11 @@ npx playwright install chromium</pre>
       if (key === 'afterReplyReactionEnabled') config.afterReplyReactionEnabled = on;
       if (key === 'afterReplyRemoveThinkingEmoji') config.afterReplyRemoveThinkingEmoji = on;
       if (key === 'fakeHumanEnabled') config.fakeHumanEnabled = on;
+      if (key === 'fakeHumanRepeatEnabled') config.fakeHumanRepeatEnabled = on;
+      if (key === 'fakeHumanStickerBattleEnabled') config.fakeHumanStickerBattleEnabled = on;
+      if (key === 'fakeHumanHumanizeEnabled') config.fakeHumanHumanizeEnabled = on;
+      if (key === 'fakeHumanTypoEnabled') config.fakeHumanTypoEnabled = on;
+      if (key === 'fakeHumanQqFacePreferSticker') config.fakeHumanQqFacePreferSticker = on;
       if (key === 'fakeHumanSyncPersona') config.fakeHumanSyncPersona = on;
       if (key === 'fakeHumanWebSearch') config.fakeHumanWebSearch = on;
       if (key === 'fakeHumanParseImage') config.fakeHumanParseImage = on;
@@ -10078,9 +10152,9 @@ npx playwright install chromium</pre>
             if (e.status === 'unknown') {
               actions += `<button type="button" class="btn btn-s" onclick="reprocessEmojiLibItem('${id}')" title="VLM 重新识别">识别</button>`;
             }
-            actions += `<button type="button" class="btn btn-s${hasTags ? ' btn-p' : ''}" onclick="setEmojiLibItemStatus('${id}','recognized')" ${hasTags ? '' : 'disabled title="请先编辑标签"'}">已认识</button>`;
+            actions += `<button type="button" class="btn btn-s${hasTags ? ' btn-p' : ''}" onclick="setEmojiLibItemStatus('${id}','recognized')" ${hasTags ? '' : 'disabled title="请先编辑标签"'}">${e.status === 'recognized' ? '再次确认' : '已认识'}</button>`;
           } else if (e.status === 'recognized') {
-            actions += `<button type="button" class="btn btn-s btn-p" onclick="setEmojiLibItemStatus('${id}','owned')">占为己有</button>`;
+            actions += `<button type="button" class="btn btn-s btn-p" onclick="setEmojiLibItemStatus('${id}','recognized')" title="再次确认后自动占为己有">再次确认收录</button>`;
             actions += `<button type="button" class="btn btn-s" onclick="editEmojiLibTags('${id}')">编辑标签</button>`;
           }
           if (e.status !== 'discarded') {
@@ -10408,26 +10482,46 @@ npx playwright install chromium</pre>
       let totalImported = 0;
       let totalSkipped = 0;
       const failNames = [];
+
+      async function postSlangImport(body) {
+        const res = await fetch(BASE + '/slangs/import', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ...body, groupId: slangGroupId || '', skipDuplicate: true })
+        });
+        if (!res.ok) {
+          const hint = res.status === 404 || res.status === 502 || res.status === 503
+            ? '插件 API 不可用，请先在 NapCat 插件列表启用「聊天机器人」'
+            : ('HTTP ' + res.status);
+          throw new Error(hint);
+        }
+        const data = await res.json();
+        if (!data.success) throw new Error(data.error || data.errors?.slice?.(0, 3)?.join('；') || '导入失败');
+        return data;
+      }
+
       for (const file of files) {
         try {
           const text = await file.text();
           const ext = (file.name.split('.').pop() || '').toLowerCase();
-          const format = ext === 'json' ? 'json' : 'txt';
-          const res = await fetch(BASE + '/slangs/import', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ content: text, format, groupId: slangGroupId || '', skipDuplicate: true })
-          });
-          if (!res.ok) {
-            const hint = res.status === 404 || res.status === 502 || res.status === 503
-              ? '插件 API 不可用，请先在 NapCat 插件列表启用「聊天机器人」'
-              : ('HTTP ' + res.status);
-            throw new Error(hint);
+          const format = ext === 'json' ? 'json' : 'auto';
+          const looksJson = text.trimStart().startsWith('{') || text.trimStart().startsWith('[');
+          if (text.length > 350000 && !looksJson) {
+            const lines = text.split(/\r?\n/);
+            const batchLines = 350;
+            for (let i = 0; i < lines.length; i += batchLines) {
+              const chunk = lines.slice(i, i + batchLines).join('\n');
+              if (!chunk.trim()) continue;
+              const data = await postSlangImport({ content: chunk, format: 'auto' });
+              totalImported += data.imported || 0;
+              totalSkipped += data.skipped || 0;
+            }
+          } else {
+            const data = await postSlangImport({ content: text, format });
+            totalImported += data.imported || 0;
+            totalSkipped += data.skipped || 0;
+            if (data.hint) console.info('[slang import]', file.name, data.hint);
           }
-          const data = await res.json();
-          if (!data.success) throw new Error(data.error || '导入失败');
-          totalImported += data.imported || 0;
-          totalSkipped += data.skipped || 0;
         } catch (e) {
           failNames.push(file.name + '（' + (e.message || '失败') + '）');
         }
@@ -10994,6 +11088,31 @@ npx playwright install chromium</pre>
       const gch = config.fakeHumanGroupChance || {};
       document.getElementById('cfg-fakeHumanGroupChance').value = Object.keys(gch).map((k) => k + ':' + gch[k]).join('\n');
       document.getElementById('cfg-fakeHumanMinInterval').value = config.fakeHumanMinInterval ?? 90;
+      document.getElementById('tgl-fakeHumanRepeatEnabled')?.classList.toggle('on', config.fakeHumanRepeatEnabled !== false);
+      const fhRepeatMin = document.getElementById('cfg-fakeHumanRepeatMinUsers');
+      if (fhRepeatMin) fhRepeatMin.value = config.fakeHumanRepeatMinUsers ?? 2;
+      const fhRepeatMax = document.getElementById('cfg-fakeHumanRepeatMaxLen');
+      if (fhRepeatMax) fhRepeatMax.value = config.fakeHumanRepeatMaxLen ?? 120;
+      document.getElementById('tgl-fakeHumanStickerBattleEnabled')?.classList.toggle('on', config.fakeHumanStickerBattleEnabled !== false);
+      const fhStickerMin = document.getElementById('cfg-fakeHumanStickerBattleMinUsers');
+      if (fhStickerMin) fhStickerMin.value = config.fakeHumanStickerBattleMinUsers ?? 2;
+      const fhTrendInt = document.getElementById('cfg-fakeHumanTrendMinInterval');
+      if (fhTrendInt) fhTrendInt.value = config.fakeHumanTrendMinInterval ?? 12;
+      document.getElementById('tgl-fakeHumanHumanizeEnabled')?.classList.toggle('on', config.fakeHumanHumanizeEnabled !== false);
+      const fhReplyStyleCh = document.getElementById('cfg-fakeHumanReplyStyleChance');
+      if (fhReplyStyleCh) fhReplyStyleCh.value = config.fakeHumanReplyStyleChance ?? 0.4;
+      const fhAtMsgCh = document.getElementById('cfg-fakeHumanAtMessageChance');
+      if (fhAtMsgCh) fhAtMsgCh.value = config.fakeHumanAtMessageChance ?? 0.35;
+      const fhInterjectCh = document.getElementById('cfg-fakeHumanInterjectChance');
+      if (fhInterjectCh) fhInterjectCh.value = config.fakeHumanInterjectChance ?? 0.35;
+      const fhAtOnlyCh = document.getElementById('cfg-fakeHumanAtOnlyChance');
+      if (fhAtOnlyCh) fhAtOnlyCh.value = config.fakeHumanAtOnlyChance ?? 0.08;
+      document.getElementById('tgl-fakeHumanTypoEnabled')?.classList.toggle('on', config.fakeHumanTypoEnabled !== false);
+      const fhTypoCh = document.getElementById('cfg-fakeHumanTypoChance');
+      if (fhTypoCh) fhTypoCh.value = config.fakeHumanTypoChance ?? 0.14;
+      document.getElementById('tgl-fakeHumanQqFacePreferSticker')?.classList.toggle('on', config.fakeHumanQqFacePreferSticker !== false);
+      const fhQqPool = document.getElementById('cfg-fakeHumanQqFaceIds');
+      if (fhQqPool) fhQqPool.value = Array.isArray(config.fakeHumanQqFaceIds) ? config.fakeHumanQqFaceIds.join(', ') : (config.fakeHumanQqFaceIds || '13,28,22,89,5,31,76,14,3,0');
       document.getElementById('cfg-fakeHumanReplyMode').value = (config.fakeHumanReplyMode || 'ai').toLowerCase();
       document.getElementById('cfg-fakeHumanTextList').value = Array.isArray(config.fakeHumanTextList) ? config.fakeHumanTextList.join('\n') : (config.fakeHumanTextList || '哈哈\n确实\n666').replace(/,/g, '\n');
       document.getElementById('cfg-fakeHumanEmojiList').value = Array.isArray(config.fakeHumanEmojiList) ? config.fakeHumanEmojiList.join('\n') : (config.fakeHumanEmojiList || '哈\n6\n草').replace(/,/g, '\n');
@@ -15541,6 +15660,21 @@ npx playwright install chromium</pre>
         fakeHumanChance: Math.max(0, Math.min(1, parseFloat(document.getElementById('cfg-fakeHumanChance').value) || 0.05)),
         fakeHumanGroupChance: groupChance,
         fakeHumanMinInterval: Math.max(0, parseInt(document.getElementById('cfg-fakeHumanMinInterval').value, 10) || 90),
+        fakeHumanRepeatEnabled: document.getElementById('tgl-fakeHumanRepeatEnabled')?.classList.contains('on') !== false,
+        fakeHumanRepeatMinUsers: Math.max(2, parseInt(document.getElementById('cfg-fakeHumanRepeatMinUsers')?.value, 10) || 2),
+        fakeHumanRepeatMaxLen: Math.max(1, parseInt(document.getElementById('cfg-fakeHumanRepeatMaxLen')?.value, 10) || 120),
+        fakeHumanStickerBattleEnabled: document.getElementById('tgl-fakeHumanStickerBattleEnabled')?.classList.contains('on') !== false,
+        fakeHumanStickerBattleMinUsers: Math.max(2, parseInt(document.getElementById('cfg-fakeHumanStickerBattleMinUsers')?.value, 10) || 2),
+        fakeHumanTrendMinInterval: Math.max(5, parseInt(document.getElementById('cfg-fakeHumanTrendMinInterval')?.value, 10) || 12),
+        fakeHumanHumanizeEnabled: document.getElementById('tgl-fakeHumanHumanizeEnabled')?.classList.contains('on') !== false,
+        fakeHumanReplyStyleChance: Math.max(0, Math.min(1, parseFloat(document.getElementById('cfg-fakeHumanReplyStyleChance')?.value) ?? 0.4)),
+        fakeHumanAtMessageChance: Math.max(0, Math.min(1, parseFloat(document.getElementById('cfg-fakeHumanAtMessageChance')?.value) ?? 0.35)),
+        fakeHumanInterjectChance: Math.max(0, Math.min(1, parseFloat(document.getElementById('cfg-fakeHumanInterjectChance')?.value) ?? 0.35)),
+        fakeHumanAtOnlyChance: Math.max(0, Math.min(1, parseFloat(document.getElementById('cfg-fakeHumanAtOnlyChance')?.value) ?? 0.08)),
+        fakeHumanTypoEnabled: document.getElementById('tgl-fakeHumanTypoEnabled')?.classList.contains('on') !== false,
+        fakeHumanTypoChance: Math.max(0, Math.min(1, parseFloat(document.getElementById('cfg-fakeHumanTypoChance')?.value) ?? 0.14)),
+        fakeHumanQqFacePreferSticker: document.getElementById('tgl-fakeHumanQqFacePreferSticker')?.classList.contains('on') !== false,
+        fakeHumanQqFaceIds: (document.getElementById('cfg-fakeHumanQqFaceIds')?.value || '').split(/[\n,，\s]+/).map((s) => s.trim()).filter((x) => /^\d+$/.test(x)),
         fakeHumanContextLines: Math.max(1, Math.min(50, parseInt(document.getElementById('cfg-fakeHumanContextLines').value, 10) || 5)),
         fakeHumanSyncPersona: document.getElementById('tgl-fakeHumanSyncPersona').classList.contains('on'),
         fakeHumanWebSearch: document.getElementById('tgl-fakeHumanWebSearch').classList.contains('on'),
